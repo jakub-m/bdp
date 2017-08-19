@@ -4,9 +4,40 @@ import (
 	"fmt"
 	"io"
 	"jakub-m/bdp/frames"
+	"jakub-m/bdp/pcap"
 	"log"
 	"os"
 )
+
+// local is the side that initiates connection (syn).
+// rmeote is the other side of the connection (syn ack).
+type flow struct {
+	local  flowDetails
+	remote flowDetails
+}
+
+// initSeqNum is initial sequence number.
+type flowDetails struct {
+	ip         pcap.IPv4
+	port       uint16
+	initSeqNum uint32
+}
+
+// isLocalToRemote indicates if a frame represents a packet going from local to remote.
+func (f *flow) isLocalToRemote(frame *frames.Frame) bool {
+	return f.local.ip == frame.IP.SourceIP() &&
+		f.local.port == frame.TCP.SourcePort() &&
+		f.remote.ip == frame.IP.DestIP() &&
+		f.remote.port == frame.TCP.DestPort()
+}
+
+// isRemoteToLocal indicates if a frame represents a packet going from remote to local.
+func (f *flow) isRemoteToLocal(frame *frames.Frame) bool {
+	return f.remote.ip == frame.IP.SourceIP() &&
+		f.remote.port == frame.TCP.SourcePort() &&
+		f.local.ip == frame.IP.DestIP() &&
+		f.local.port == frame.TCP.DestPort()
+}
 
 func main() {
 	pcapFileName := os.Args[1]
@@ -17,16 +48,42 @@ func main() {
 	}
 	defer file.Close()
 
+	flow := &flow{}
+
+	printFrame := func(f *frames.Frame) error {
+		if f.TCP.IsSyn() && !f.TCP.IsAck() { // syn
+			flow.local.ip = f.IP.SourceIP()
+			flow.local.port = f.TCP.SourcePort()
+			flow.local.initSeqNum = f.TCP.SeqNum()
+			flow.remote.ip = f.IP.DestIP()
+			flow.remote.port = f.TCP.DestPort()
+		}
+
+		if f.TCP.IsSyn() && f.TCP.IsAck() { // syn acl
+			flow.remote.initSeqNum = f.TCP.SeqNum()
+		}
+
+		msg := fmt.Sprintf("%s %d -> %s %d", f.IP.SourceIP(), f.TCP.SourcePort(), f.IP.DestIP(), f.TCP.DestPort())
+		if f.TCP.IsSyn() {
+			msg += " syn"
+		}
+		if f.TCP.IsAck() {
+			msg += " ack"
+		}
+		if flow.isLocalToRemote(f) {
+			msg += fmt.Sprintf(" >> seq %d ack %d", f.TCP.SeqNum()-flow.local.initSeqNum, f.TCP.AckNum()-flow.remote.initSeqNum)
+		}
+		if flow.isRemoteToLocal(f) {
+			msg += fmt.Sprintf(" << seq %d ack %d", f.TCP.SeqNum()-flow.remote.initSeqNum, f.TCP.AckNum()-flow.local.initSeqNum)
+		}
+
+		fmt.Println(msg)
+
+		return nil
+	}
+
 	err = frames.ProcessFrames(file, printFrame)
 	if err != nil && err != io.EOF {
 		log.Fatal(err)
 	}
-}
-
-func printFrame(f *frames.Frame) error {
-	fmt.Println(f.Record.String())
-	fmt.Println(f.Ether.String())
-	fmt.Println(f.IP.String())
-	fmt.Println(f.TCP.String())
-	return nil
 }

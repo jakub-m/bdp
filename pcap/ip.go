@@ -39,6 +39,14 @@ type IpFrame struct {
 	Data []byte
 }
 
+func (f *IpFrame) SourceIP() IPv4 {
+	return f.hdr.SourceIP
+}
+
+func (f *IpFrame) DestIP() IPv4 {
+	return f.hdr.DestIP
+}
+
 func (f *IpFrame) String() string {
 	return fmt.Sprintf("IP {Ver %d, hdr len %d, %s -> %s, data=%d}", f.hdr.version(), f.hdr.headerLength(), f.hdr.SourceIP.String(), f.hdr.DestIP.String(), len(f.Data))
 }

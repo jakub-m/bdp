@@ -42,6 +42,22 @@ func (f *TcpFrame) IsAck() bool {
 	return f.hdr.Offset_Flags&0x10 != 0
 }
 
+func (f *TcpFrame) SeqNum() uint32 {
+	return f.hdr.SeqNum
+}
+
+func (f *TcpFrame) AckNum() uint32 {
+	return f.hdr.AckNum
+}
+
+func (f *TcpFrame) SourcePort() uint16 {
+	return f.hdr.SourcePort
+}
+
+func (f *TcpFrame) DestPort() uint16 {
+	return f.hdr.DestPort
+}
+
 func ParseTCPFrame(raw []byte) (*TcpFrame, error) {
 	reader := bytes.NewReader(raw)
 	header := &tcpHdr{}
