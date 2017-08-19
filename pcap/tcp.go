@@ -10,12 +10,18 @@ import (
 type tcpHdr struct {
 	SourcePort    uint16
 	DestPort      uint16
-	SeqNum        uint32
-	AckNum        uint32
+	SeqNum        SeqNum
+	AckNum        SeqNum
 	Offset_Flags  uint16
 	WindowSize    uint16
 	Checksum      uint16
 	UrgentPointer uint16
+}
+
+type SeqNum uint32
+
+func (s SeqNum) RelativeTo(r SeqNum) uint32 {
+	return uint32(s) - uint32(r)
 }
 
 type TcpFrame struct {
@@ -42,11 +48,11 @@ func (f *TcpFrame) IsAck() bool {
 	return f.hdr.Offset_Flags&0x10 != 0
 }
 
-func (f *TcpFrame) SeqNum() uint32 {
+func (f *TcpFrame) SeqNum() SeqNum {
 	return f.hdr.SeqNum
 }
 
-func (f *TcpFrame) AckNum() uint32 {
+func (f *TcpFrame) AckNum() SeqNum {
 	return f.hdr.AckNum
 }
 

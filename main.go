@@ -20,7 +20,7 @@ type flow struct {
 type flowDetails struct {
 	ip         pcap.IPv4
 	port       uint16
-	initSeqNum uint32
+	initSeqNum pcap.SeqNum
 }
 
 // isLocalToRemote indicates if a frame represents a packet going from local to remote.
@@ -71,10 +71,10 @@ func main() {
 			msg += " ack"
 		}
 		if flow.isLocalToRemote(f) {
-			msg += fmt.Sprintf(" >> seq %d ack %d", f.TCP.SeqNum()-flow.local.initSeqNum, f.TCP.AckNum()-flow.remote.initSeqNum)
+			msg += fmt.Sprintf(" >> seq %d ack %d", f.TCP.SeqNum().RelativeTo(flow.local.initSeqNum), f.TCP.AckNum().RelativeTo(flow.remote.initSeqNum))
 		}
 		if flow.isRemoteToLocal(f) {
-			msg += fmt.Sprintf(" << seq %d ack %d", f.TCP.SeqNum()-flow.remote.initSeqNum, f.TCP.AckNum()-flow.local.initSeqNum)
+			msg += fmt.Sprintf(" << seq %d ack %d", f.TCP.SeqNum().RelativeTo(flow.remote.initSeqNum), f.TCP.AckNum().RelativeTo(flow.local.initSeqNum))
 		}
 
 		fmt.Println(msg)
