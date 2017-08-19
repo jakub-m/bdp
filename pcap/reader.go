@@ -49,6 +49,10 @@ func (r *PcapRecord) Timestamp() uint64 {
 	return uint64(r.hdr.TSSec)*1000000 + uint64(r.hdr.TSUsec)
 }
 
+func (r *PcapRecord) OrigLen() uint32 {
+	return r.hdr.OrigLen
+}
+
 func (r *PcapRecord) String() string {
 	return fmt.Sprintf("%+v, data=%d", r.hdr, len(r.Data))
 }

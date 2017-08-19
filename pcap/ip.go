@@ -47,6 +47,14 @@ func (f *IpFrame) DestIP() IPv4 {
 	return f.hdr.DestIP
 }
 
+func (f *IpFrame) TotalLength() uint16 {
+	return f.hdr.TotalLength
+}
+
+func (f *IpFrame) HeaderLength() uint16 {
+	return uint16(f.hdr.headerLength())
+}
+
 func (f *IpFrame) String() string {
 	return fmt.Sprintf("IP {Ver %d, hdr len %d, %s -> %s, data=%d}", f.hdr.version(), f.hdr.headerLength(), f.hdr.SourceIP.String(), f.hdr.DestIP.String(), len(f.Data))
 }

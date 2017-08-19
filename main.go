@@ -74,11 +74,19 @@ func main() {
 		if f.TCP.IsAck() {
 			msg += " ack"
 		}
+		payloadSize := uint32(f.PayloadSize())
 		if flow.isLocalToRemote(f) {
-			msg += fmt.Sprintf(" >  seq %d ack %d", f.TCP.SeqNum().RelativeTo(flow.local.initSeqNum), f.TCP.AckNum().RelativeTo(flow.remote.initSeqNum))
+			relSyn := f.TCP.SeqNum().RelativeTo(flow.local.initSeqNum)
+			relAck := f.TCP.AckNum().RelativeTo(flow.remote.initSeqNum)
+			// FIXME: handle next syn at integer boundaries gracefully.
+			nextSyn := relSyn + payloadSize
+			msg += fmt.Sprintf(" >  %d. seq %d (exp %d) ack %d", payloadSize, relSyn, nextSyn, relAck)
 		}
 		if flow.isRemoteToLocal(f) {
-			msg += fmt.Sprintf("  < seq %d ack %d", f.TCP.SeqNum().RelativeTo(flow.remote.initSeqNum), f.TCP.AckNum().RelativeTo(flow.local.initSeqNum))
+			relSyn := f.TCP.SeqNum().RelativeTo(flow.remote.initSeqNum)
+			relAck := f.TCP.AckNum().RelativeTo(flow.local.initSeqNum)
+			nextSyn := relSyn + payloadSize
+			msg += fmt.Sprintf("  < %d. seq %d (exp %d) ack %d", payloadSize, relSyn, nextSyn, relAck)
 		}
 
 		fmt.Println(msg)

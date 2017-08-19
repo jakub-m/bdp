@@ -14,6 +14,11 @@ type Frame struct {
 
 type ProcessFrameFunc func(f *Frame) error
 
+// PayloadSize returns size of TCP payload.
+func (f *Frame) PayloadSize() uint16 {
+	return f.IP.TotalLength() - f.IP.HeaderLength() - f.TCP.HeaderSize()
+}
+
 func ProcessFrames(r io.Reader, fn ProcessFrameFunc) error {
 	p, err := pcap.NewPcap(r)
 	if err != nil {

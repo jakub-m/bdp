@@ -41,11 +41,11 @@ func (f *TcpFrame) String() string {
 }
 
 func (f *TcpFrame) IsSyn() bool {
-	return f.hdr.Offset_Flags&0x02 != 0
+	return f.hdr.Offset_Flags&0x0002 != 0
 }
 
 func (f *TcpFrame) IsAck() bool {
-	return f.hdr.Offset_Flags&0x10 != 0
+	return f.hdr.Offset_Flags&0x0010 != 0
 }
 
 func (f *TcpFrame) SeqNum() SeqNum {
@@ -62,6 +62,11 @@ func (f *TcpFrame) SourcePort() uint16 {
 
 func (f *TcpFrame) DestPort() uint16 {
 	return f.hdr.DestPort
+}
+
+// HeaderSize gives size of the TCP header in bytes.
+func (f *TcpFrame) HeaderSize() uint16 {
+	return (f.hdr.Offset_Flags & 0xF000 >> 12) * 4
 }
 
 func ParseTCPFrame(raw []byte) (*TcpFrame, error) {
