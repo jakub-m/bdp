@@ -26,10 +26,17 @@ func main() {
 			log.Fatal(err)
 		}
 		fmt.Println(record.String())
+
 		eth, err := pcap.ParseEtherFrame(record.Data)
 		if err != nil {
 			log.Fatal(err)
 		}
 		fmt.Println(eth.String())
+
+		ip, err := pcap.ParseIPV4Frame(eth.Data)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(ip.String())
 	}
 }
