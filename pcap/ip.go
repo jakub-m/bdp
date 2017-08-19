@@ -6,6 +6,7 @@ import (
 	"fmt"
 )
 
+// https://en.wikipedia.org/wiki/IPv4
 type ipHdr struct {
 	Version_IHL          uint8
 	DSCP_ECN             uint8

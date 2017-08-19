@@ -53,5 +53,4 @@ func ParseEtherFrame(raw []byte) (*ether, error) {
 		hdr:  header,
 		Data: raw[nRead:],
 	}, nil
-
 }
