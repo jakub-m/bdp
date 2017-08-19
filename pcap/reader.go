@@ -41,11 +41,11 @@ type pcapRecordHdr struct {
 
 type pcapRecord struct {
 	hdr  *pcapRecordHdr
-	data []byte
+	Data []byte
 }
 
 func (r *pcapRecord) String() string {
-	return fmt.Sprintf("%+v, data=%d", r.hdr, len(r.data))
+	return fmt.Sprintf("%+v, data=%d", r.hdr, len(r.Data))
 }
 
 func NewPcap(r io.Reader) (*pcap, error) {
@@ -76,6 +76,6 @@ func (p *pcap) NextRecord() (*pcapRecord, error) {
 	}
 	return &pcapRecord{
 		hdr:  hdr,
-		data: buf,
+		Data: buf,
 	}, nil
 }

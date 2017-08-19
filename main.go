@@ -21,10 +21,15 @@ func main() {
 	}
 
 	for {
-		if d, err := p.NextRecord(); err == nil {
-			fmt.Println(d.String())
-		} else {
+		record, err := p.NextRecord()
+		if err != nil {
 			log.Fatal(err)
 		}
+		fmt.Println(record.String())
+		eth, err := pcap.ParseEtherFrame(record.Data)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(eth.String())
 	}
 }
