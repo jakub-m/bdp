@@ -78,7 +78,7 @@ func main() {
 			msg += fmt.Sprintf(" >  seq %d ack %d", f.TCP.SeqNum().RelativeTo(flow.local.initSeqNum), f.TCP.AckNum().RelativeTo(flow.remote.initSeqNum))
 		}
 		if flow.isRemoteToLocal(f) {
-			msg += fmt.Sprintf(" << seq %d ack %d", f.TCP.SeqNum().RelativeTo(flow.remote.initSeqNum), f.TCP.AckNum().RelativeTo(flow.local.initSeqNum))
+			msg += fmt.Sprintf("  < seq %d ack %d", f.TCP.SeqNum().RelativeTo(flow.remote.initSeqNum), f.TCP.AckNum().RelativeTo(flow.local.initSeqNum))
 		}
 
 		fmt.Println(msg)
