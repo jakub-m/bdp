@@ -9,11 +9,13 @@ import (
 	"os"
 )
 
+// initTimestamp initial timestamp in microseconds
 // local is the side that initiates connection (syn).
 // rmeote is the other side of the connection (syn ack).
 type flow struct {
-	local  flowDetails
-	remote flowDetails
+	initTimestamp uint64
+	local         flowDetails
+	remote        flowDetails
 }
 
 // initSeqNum is initial sequence number.
@@ -57,13 +59,15 @@ func main() {
 			flow.local.initSeqNum = f.TCP.SeqNum()
 			flow.remote.ip = f.IP.DestIP()
 			flow.remote.port = f.TCP.DestPort()
+			flow.initTimestamp = f.Record.Timestamp()
 		}
 
-		if f.TCP.IsSyn() && f.TCP.IsAck() { // syn acl
+		if f.TCP.IsSyn() && f.TCP.IsAck() { // syn ack
 			flow.remote.initSeqNum = f.TCP.SeqNum()
 		}
 
-		msg := fmt.Sprintf("%s %d -> %s %d", f.IP.SourceIP(), f.TCP.SourcePort(), f.IP.DestIP(), f.TCP.DestPort())
+		msg := fmt.Sprintf("%d", f.Record.Timestamp()-flow.initTimestamp)
+		msg += fmt.Sprintf(" %s %d -> %s %d", f.IP.SourceIP(), f.TCP.SourcePort(), f.IP.DestIP(), f.TCP.DestPort())
 		if f.TCP.IsSyn() {
 			msg += " syn"
 		}
@@ -71,14 +75,13 @@ func main() {
 			msg += " ack"
 		}
 		if flow.isLocalToRemote(f) {
-			msg += fmt.Sprintf(" >> seq %d ack %d", f.TCP.SeqNum().RelativeTo(flow.local.initSeqNum), f.TCP.AckNum().RelativeTo(flow.remote.initSeqNum))
+			msg += fmt.Sprintf(" >  seq %d ack %d", f.TCP.SeqNum().RelativeTo(flow.local.initSeqNum), f.TCP.AckNum().RelativeTo(flow.remote.initSeqNum))
 		}
 		if flow.isRemoteToLocal(f) {
 			msg += fmt.Sprintf(" << seq %d ack %d", f.TCP.SeqNum().RelativeTo(flow.remote.initSeqNum), f.TCP.AckNum().RelativeTo(flow.local.initSeqNum))
 		}
 
 		fmt.Println(msg)
-
 		return nil
 	}
 
