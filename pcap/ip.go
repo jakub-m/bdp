@@ -16,8 +16,8 @@ type ipHdr struct {
 	TimeToLive           uint8
 	Protocol             uint8
 	HeaderChecksum       uint16
-	SourceIP             [4]uint8
-	DestIP               [4]byte
+	SourceIP             IPv4
+	DestIP               IPv4
 }
 
 func (h *ipHdr) version() uint8 {
@@ -28,13 +28,19 @@ func (h *ipHdr) headerLength() uint8 {
 	return (h.Version_IHL & 0x0F) * 4
 }
 
+type IPv4 [4]uint8
+
+func (p IPv4) String() string {
+	return fmt.Sprintf("%d.%d.%d.%d", p[0], p[1], p[2], p[3])
+}
+
 type IpFrame struct {
 	hdr  *ipHdr
 	Data []byte
 }
 
 func (f *IpFrame) String() string {
-	return fmt.Sprintf("IP {Ver %d, hdr length %d, %+v, data=%d}", f.hdr.version(), f.hdr.headerLength(), f.hdr, len(f.Data))
+	return fmt.Sprintf("IP {Ver %d, hdr len %d, %s -> %s, data=%d}", f.hdr.version(), f.hdr.headerLength(), f.hdr.SourceIP.String(), f.hdr.DestIP.String(), len(f.Data))
 }
 
 func ParseIPV4Frame(raw []byte) (*IpFrame, error) {
