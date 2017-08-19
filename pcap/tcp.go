@@ -23,7 +23,23 @@ type tcpFrame struct {
 }
 
 func (f *tcpFrame) String() string {
-	return fmt.Sprintf("TCP %+v", f.hdr)
+	syn := ""
+	ack := ""
+	if f.IsSyn() {
+		syn = "syn "
+	}
+	if f.IsAck() {
+		ack = "ack "
+	}
+	return fmt.Sprintf("TCP %s%s%+v", syn, ack, f.hdr)
+}
+
+func (f *tcpFrame) IsSyn() bool {
+	return f.hdr.Offset_Flags&0x02 != 0
+}
+
+func (f *tcpFrame) IsAck() bool {
+	return f.hdr.Offset_Flags&0x10 != 0
 }
 
 func ParseTCPFrame(raw []byte) (*tcpFrame, error) {
