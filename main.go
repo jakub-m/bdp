@@ -38,5 +38,11 @@ func main() {
 			log.Fatal(err)
 		}
 		fmt.Println(ip.String())
+
+		tcp, err := pcap.ParseTCPFrame(ip.Data)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(tcp.String())
 	}
 }
