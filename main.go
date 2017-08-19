@@ -2,7 +2,8 @@ package main
 
 import (
 	"fmt"
-	"jakub-m/bdp/pcap"
+	"io"
+	"jakub-m/bdp/frames"
 	"log"
 	"os"
 )
@@ -15,34 +16,17 @@ func main() {
 		log.Fatal(err)
 	}
 	defer file.Close()
-	p, err := pcap.NewPcap(file)
-	if err != nil {
+
+	err = frames.ProcessFrames(file, printFrame)
+	if err != nil && err != io.EOF {
 		log.Fatal(err)
 	}
+}
 
-	for {
-		record, err := p.NextRecord()
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Println(record.String())
-
-		eth, err := pcap.ParseEtherFrame(record.Data)
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Println(eth.String())
-
-		ip, err := pcap.ParseIPV4Frame(eth.Data)
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Println(ip.String())
-
-		tcp, err := pcap.ParseTCPFrame(ip.Data)
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Println(tcp.String())
-	}
+func printFrame(f *frames.Frame) error {
+	fmt.Println(f.Record.String())
+	fmt.Println(f.Ether.String())
+	fmt.Println(f.IP.String())
+	fmt.Println(f.TCP.String())
+	return nil
 }

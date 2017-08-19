@@ -18,11 +18,11 @@ type tcpHdr struct {
 	UrgentPointer uint16
 }
 
-type tcpFrame struct {
+type TcpFrame struct {
 	hdr *tcpHdr
 }
 
-func (f *tcpFrame) String() string {
+func (f *TcpFrame) String() string {
 	syn := ""
 	ack := ""
 	if f.IsSyn() {
@@ -34,15 +34,15 @@ func (f *tcpFrame) String() string {
 	return fmt.Sprintf("TCP %s%s%+v", syn, ack, f.hdr)
 }
 
-func (f *tcpFrame) IsSyn() bool {
+func (f *TcpFrame) IsSyn() bool {
 	return f.hdr.Offset_Flags&0x02 != 0
 }
 
-func (f *tcpFrame) IsAck() bool {
+func (f *TcpFrame) IsAck() bool {
 	return f.hdr.Offset_Flags&0x10 != 0
 }
 
-func ParseTCPFrame(raw []byte) (*tcpFrame, error) {
+func ParseTCPFrame(raw []byte) (*TcpFrame, error) {
 	reader := bytes.NewReader(raw)
 	header := &tcpHdr{}
 	err := binary.Read(reader, binary.BigEndian, header)
@@ -50,7 +50,7 @@ func ParseTCPFrame(raw []byte) (*tcpFrame, error) {
 		return nil, err
 	}
 
-	return &tcpFrame{
+	return &TcpFrame{
 		hdr: header,
 	}, nil
 }

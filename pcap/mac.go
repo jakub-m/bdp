@@ -20,12 +20,12 @@ type etherHdr struct {
 	EtherType uint16
 }
 
-type ether struct {
+type Ether struct {
 	hdr  *etherHdr
 	Data []byte
 }
 
-func (e *ether) String() string {
+func (e *Ether) String() string {
 	return fmt.Sprintf("Ether {dst: %#x, src: %#x, etherType: %#x}", e.hdr.MacDest, e.hdr.MacSrc, e.hdr.EtherType)
 }
 
@@ -35,7 +35,7 @@ func init() {
 	etherHdrSize = int(unsafe.Sizeof(*etherHdr))
 }
 
-func ParseEtherFrame(raw []byte) (*ether, error) {
+func ParseEtherFrame(raw []byte) (*Ether, error) {
 	reader := bytes.NewReader(raw)
 	header := &etherHdr{}
 	nRead := 0
@@ -49,7 +49,7 @@ func ParseEtherFrame(raw []byte) (*ether, error) {
 		return nil, fmt.Errorf("Expected IPv4 ethertype, got %#x", header.EtherType)
 	}
 
-	return &ether{
+	return &Ether{
 		hdr:  header,
 		Data: raw[nRead:],
 	}, nil

@@ -39,12 +39,12 @@ type pcapRecordHdr struct {
 	OrigLen uint32 // actual length of packet
 }
 
-type pcapRecord struct {
+type PcapRecord struct {
 	hdr  *pcapRecordHdr
 	Data []byte
 }
 
-func (r *pcapRecord) String() string {
+func (r *PcapRecord) String() string {
 	return fmt.Sprintf("%+v, data=%d", r.hdr, len(r.Data))
 }
 
@@ -63,7 +63,7 @@ func NewPcap(r io.Reader) (*pcap, error) {
 	}, nil
 }
 
-func (p *pcap) NextRecord() (*pcapRecord, error) {
+func (p *pcap) NextRecord() (*PcapRecord, error) {
 	hdr := &pcapRecordHdr{}
 	err := binary.Read(p.reader, binary.LittleEndian, hdr)
 	if err != nil {
@@ -74,7 +74,7 @@ func (p *pcap) NextRecord() (*pcapRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &pcapRecord{
+	return &PcapRecord{
 		hdr:  hdr,
 		Data: buf,
 	}, nil
