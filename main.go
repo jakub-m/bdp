@@ -66,29 +66,7 @@ func main() {
 			flow.remote.initSeqNum = f.TCP.SeqNum()
 		}
 
-		msg := fmt.Sprintf("%d", f.Record.Timestamp()-flow.initTimestamp)
-		msg += fmt.Sprintf(" %s %d -> %s %d", f.IP.SourceIP(), f.TCP.SourcePort(), f.IP.DestIP(), f.TCP.DestPort())
-		if f.TCP.IsSyn() {
-			msg += " syn"
-		}
-		if f.TCP.IsAck() {
-			msg += " ack"
-		}
-		payloadSize := uint32(f.PayloadSize())
-		if flow.isLocalToRemote(f) {
-			relSyn := f.TCP.SeqNum().RelativeTo(flow.local.initSeqNum)
-			relAck := f.TCP.AckNum().RelativeTo(flow.remote.initSeqNum)
-			// FIXME: handle next syn at integer boundaries gracefully.
-			nextSyn := relSyn + payloadSize
-			msg += fmt.Sprintf(" >  %d. seq %d (exp %d) ack %d", payloadSize, relSyn, nextSyn, relAck)
-		}
-		if flow.isRemoteToLocal(f) {
-			relSyn := f.TCP.SeqNum().RelativeTo(flow.remote.initSeqNum)
-			relAck := f.TCP.AckNum().RelativeTo(flow.local.initSeqNum)
-			nextSyn := relSyn + payloadSize
-			msg += fmt.Sprintf("  < %d. seq %d (exp %d) ack %d", payloadSize, relSyn, nextSyn, relAck)
-		}
-
+		msg := flow.fmtFrame(f)
 		fmt.Println(msg)
 		return nil
 	}
@@ -97,4 +75,30 @@ func main() {
 	if err != nil && err != io.EOF {
 		log.Fatal(err)
 	}
+}
+
+func (flow *flow) fmtFrame(f *frames.Frame) string {
+	msg := fmt.Sprintf("%d", f.Record.Timestamp()-flow.initTimestamp)
+	msg += fmt.Sprintf(" %s %d -> %s %d", f.IP.SourceIP(), f.TCP.SourcePort(), f.IP.DestIP(), f.TCP.DestPort())
+	if f.TCP.IsSyn() {
+		msg += " syn"
+	}
+	if f.TCP.IsAck() {
+		msg += " ack"
+	}
+	payloadSize := uint32(f.PayloadSize())
+	if flow.isLocalToRemote(f) {
+		relSyn := f.TCP.SeqNum().RelativeTo(flow.local.initSeqNum)
+		relAck := f.TCP.AckNum().RelativeTo(flow.remote.initSeqNum)
+		// FIXME: handle next syn at integer boundaries gracefully.
+		nextSyn := relSyn + payloadSize
+		msg += fmt.Sprintf(" >  %d. seq %d (exp %d) ack %d", payloadSize, relSyn, nextSyn, relAck)
+	}
+	if flow.isRemoteToLocal(f) {
+		relSyn := f.TCP.SeqNum().RelativeTo(flow.remote.initSeqNum)
+		relAck := f.TCP.AckNum().RelativeTo(flow.local.initSeqNum)
+		nextSyn := relSyn + payloadSize
+		msg += fmt.Sprintf("  < %d. seq %d (exp %d) ack %d", payloadSize, relSyn, nextSyn, relAck)
+	}
+	return msg
 }
