@@ -1,45 +1,11 @@
 package main
 
 import (
-	"fmt"
-	"io"
+	"jakub-m/bdp/flow"
 	"jakub-m/bdp/frames"
-	"jakub-m/bdp/pcap"
 	"log"
 	"os"
 )
-
-// initTimestamp initial timestamp in microseconds
-// local is the side that initiates connection (syn).
-// rmeote is the other side of the connection (syn ack).
-type flow struct {
-	initTimestamp uint64
-	local         flowDetails
-	remote        flowDetails
-}
-
-// initSeqNum is initial sequence number.
-type flowDetails struct {
-	ip         pcap.IPv4
-	port       uint16
-	initSeqNum pcap.SeqNum
-}
-
-// isLocalToRemote indicates if a frame represents a packet going from local to remote.
-func (f *flow) isLocalToRemote(frame *frames.Frame) bool {
-	return f.local.ip == frame.IP.SourceIP() &&
-		f.local.port == frame.TCP.SourcePort() &&
-		f.remote.ip == frame.IP.DestIP() &&
-		f.remote.port == frame.TCP.DestPort()
-}
-
-// isRemoteToLocal indicates if a frame represents a packet going from remote to local.
-func (f *flow) isRemoteToLocal(frame *frames.Frame) bool {
-	return f.remote.ip == frame.IP.SourceIP() &&
-		f.remote.port == frame.TCP.SourcePort() &&
-		f.local.ip == frame.IP.DestIP() &&
-		f.local.port == frame.TCP.DestPort()
-}
 
 func main() {
 	pcapFileName := os.Args[1]
@@ -50,55 +16,12 @@ func main() {
 	}
 	defer file.Close()
 
-	flow := &flow{}
-
-	printFrame := func(f *frames.Frame) error {
-		if f.TCP.IsSyn() && !f.TCP.IsAck() { // syn
-			flow.local.ip = f.IP.SourceIP()
-			flow.local.port = f.TCP.SourcePort()
-			flow.local.initSeqNum = f.TCP.SeqNum()
-			flow.remote.ip = f.IP.DestIP()
-			flow.remote.port = f.TCP.DestPort()
-			flow.initTimestamp = f.Record.Timestamp()
-		}
-
-		if f.TCP.IsSyn() && f.TCP.IsAck() { // syn ack
-			flow.remote.initSeqNum = f.TCP.SeqNum()
-		}
-
-		msg := flow.fmtFrame(f)
-		fmt.Println(msg)
-		return nil
-	}
-
-	err = frames.ProcessFrames(file, printFrame)
-	if err != nil && err != io.EOF {
+	frames, err := frames.LoadFromFile(file)
+	if err != nil {
 		log.Fatal(err)
 	}
-}
-
-func (flow *flow) fmtFrame(f *frames.Frame) string {
-	msg := fmt.Sprintf("%d", f.Record.Timestamp()-flow.initTimestamp)
-	msg += fmt.Sprintf(" %s %d -> %s %d", f.IP.SourceIP(), f.TCP.SourcePort(), f.IP.DestIP(), f.TCP.DestPort())
-	if f.TCP.IsSyn() {
-		msg += " syn"
+	err = flow.ProcessFrames(frames)
+	if err != nil {
+		log.Fatal(err)
 	}
-	if f.TCP.IsAck() {
-		msg += " ack"
-	}
-	payloadSize := uint32(f.PayloadSize())
-	if flow.isLocalToRemote(f) {
-		relSyn := f.TCP.SeqNum().RelativeTo(flow.local.initSeqNum)
-		relAck := f.TCP.AckNum().RelativeTo(flow.remote.initSeqNum)
-		// FIXME: handle next syn at integer boundaries gracefully.
-		nextSyn := relSyn + payloadSize
-		msg += fmt.Sprintf(" >  %d. seq %d (exp %d) ack %d", payloadSize, relSyn, nextSyn, relAck)
-	}
-	if flow.isRemoteToLocal(f) {
-		relSyn := f.TCP.SeqNum().RelativeTo(flow.remote.initSeqNum)
-		relAck := f.TCP.AckNum().RelativeTo(flow.local.initSeqNum)
-		nextSyn := relSyn + payloadSize
-		msg += fmt.Sprintf("  < %d. seq %d (exp %d) ack %d", payloadSize, relSyn, nextSyn, relAck)
-	}
-	return msg
 }
