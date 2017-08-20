@@ -21,52 +21,49 @@ type processFrameFunc func(f *Frame) error
 
 func LoadFromFile(r io.Reader) ([]*Frame, error) {
 	frames := []*Frame{}
-	fn := func(f *Frame) error {
-		frames = append(frames, f)
-		return nil
-	}
-	err := processFrames(r, fn)
-	if err != nil && err != io.EOF {
-		return nil, err
-	}
-	return frames, nil
-}
 
-func processFrames(r io.Reader, fn processFrameFunc) error {
 	p, err := pcap.NewPcap(r)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	for {
 		record, err := p.NextRecord()
+		if err == io.EOF {
+			return frames, nil
+		}
 		if err != nil {
-			return err
+			return nil, err
 		}
 
-		eth, err := pcap.ParseEtherFrame(record.Data)
+		frame, err := createFrameFromRecord(record)
 		if err != nil {
-			return err
+			return nil, err
 		}
-
-		ip, err := pcap.ParseIPV4Frame(eth.Data)
-		if err != nil {
-			return err
-		}
-
-		tcp, err := pcap.ParseTCPFrame(ip.Data)
-		if err != nil {
-			return err
-		}
-
-		err = fn(&Frame{
-			Record: record,
-			Ether:  eth,
-			IP:     ip,
-			TCP:    tcp,
-		})
-		if err != nil {
-			return err
-		}
+		frames = append(frames, frame)
 	}
+}
+
+func createFrameFromRecord(record *pcap.PcapRecord) (*Frame, error) {
+	eth, err := pcap.ParseEtherFrame(record.Data)
+	if err != nil {
+		return nil, err
+	}
+
+	ip, err := pcap.ParseIPV4Frame(eth.Data)
+	if err != nil {
+		return nil, err
+	}
+
+	tcp, err := pcap.ParseTCPFrame(ip.Data)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Frame{
+		Record: record,
+		Ether:  eth,
+		IP:     ip,
+		TCP:    tcp,
+	}, nil
 }
