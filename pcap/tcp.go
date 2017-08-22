@@ -20,8 +20,12 @@ type tcpHdr struct {
 
 type SeqNum uint32
 
-func (s SeqNum) RelativeTo(r SeqNum) uint32 {
-	return uint32(s) - uint32(r)
+func (s SeqNum) RelativeTo(r SeqNum) SeqNum {
+	return SeqNum(uint32(s) - uint32(r))
+}
+
+func (s SeqNum) ExpectedForPayload(size uint16) SeqNum {
+	return SeqNum(uint32(s) + uint32(size))
 }
 
 type TcpPacket struct {

@@ -7,12 +7,14 @@ import (
 )
 
 func ProcessPackets(packets []*packet.Packet) error {
-	flow := &flow{}
+	flow := &flow{
+		gotSyn:    false,
+		gotSynAck: false,
+	}
 
 	for _, f := range packets {
-		flow.consumePacket(f)
-		msg := flow.fmtPacket(f)
-		fmt.Println(msg)
+		fp := flow.consumePacket(f)
+		fmt.Println(fp.String())
 	}
 	return nil
 }
@@ -23,9 +25,11 @@ func ProcessPackets(packets []*packet.Packet) error {
 // inflight are the files that are sent from local to remote and are not yet acknowledged.
 type flow struct {
 	initTimestamp uint64
+	gotSyn        bool
+	gotSynAck     bool
 	local         flowDetails
 	remote        flowDetails
-	inflight      []*packet.Packet
+	inflight      []*flowPacket
 }
 
 // initSeqNum is initial sequence number.
@@ -35,97 +39,148 @@ type flowDetails struct {
 	initSeqNum pcap.SeqNum
 }
 
-func (f *flow) consumePacket(packet *packet.Packet) {
+// flowPacket is a packet.Packet with flow context
+type flowPacket struct {
+	relativeTimestamp uint64
+	packet            *packet.Packet
+	direction         flowPacketDirection
+	relativeSeqNum    pcap.SeqNum
+	relativeAckNum    pcap.SeqNum
+	expectedSeqNum    pcap.SeqNum
+}
+
+type flowPacketDirection int
+
+const (
+	localToRemote flowPacketDirection = iota
+	remoteToLocal
+)
+
+func (f *flow) consumePacket(packet *packet.Packet) *flowPacket {
+	// TODO: Handle flows without syn and syn+ack, and out-of-order.
 	if packet.TCP.IsSyn() && !packet.TCP.IsAck() {
-		f.onSyn(packet)
+		flowPacket := f.createSynFlowPacket(packet)
+		f.onSyn(flowPacket)
+		return flowPacket
 	} else if packet.TCP.IsSyn() && packet.TCP.IsAck() {
-		f.onSynAck(packet)
-	} else if f.isLocalToRemote(packet) {
-		f.onSend(packet)
-	} else if f.isRemoteToLocal(packet) && packet.TCP.IsAck() {
-		f.onAck(packet)
+		flowPacket := f.createSynAckFlowPacket(packet)
+		f.onSynAck(flowPacket)
+		return flowPacket
+	} else {
+		flowPacket := f.createFlowPacket(packet)
+		if flowPacket.direction == localToRemote {
+			f.onSend(flowPacket)
+		} else if flowPacket.direction == remoteToLocal && flowPacket.packet.TCP.IsAck() {
+			f.onAck(flowPacket)
+		} else {
+			panic("direction not set!")
+		}
+		return flowPacket
 	}
 }
 
-func (f *flow) onSyn(packet *packet.Packet) {
-	f.local.ip = packet.IP.SourceIP()
-	f.local.port = packet.TCP.SourcePort()
-	f.local.initSeqNum = packet.TCP.SeqNum()
-	f.remote.ip = packet.IP.DestIP()
-	f.remote.port = packet.TCP.DestPort()
-	f.initTimestamp = packet.Record.Timestamp()
+func (f *flow) onSyn(p *flowPacket) {
+	f.local.ip = p.packet.IP.SourceIP()
+	f.local.port = p.packet.TCP.SourcePort()
+	f.local.initSeqNum = p.packet.TCP.SeqNum()
+	f.remote.ip = p.packet.IP.DestIP()
+	f.remote.port = p.packet.TCP.DestPort()
+	f.initTimestamp = p.packet.Record.Timestamp()
+	f.gotSyn = true
 }
 
-func (f *flow) onSynAck(packet *packet.Packet) {
-	f.remote.initSeqNum = packet.TCP.SeqNum()
+func (f *flow) onSynAck(p *flowPacket) {
+	f.remote.initSeqNum = p.packet.TCP.SeqNum()
+	f.gotSynAck = true
 }
 
 // Packets sent are inflight until acknowledged. Only packets with payload are expected to be acknowledged (i.e. pure 'acks' with no payload do not count as inflight.)
-func (f *flow) onSend(packet *packet.Packet) {
-	payloadSize := packet.PayloadSize()
+func (f *flow) onSend(p *flowPacket) {
+	payloadSize := p.packet.PayloadSize()
 	if payloadSize == 0 {
 		return
 	}
-	f.inflight = append(f.inflight, packet)
+	f.inflight = append(f.inflight, p)
 	fmt.Print("inflight ", len(f.inflight))
 	for _, g := range f.inflight {
-		fmt.Print(" ", f.getExpectedSeqNum(g))
+		fmt.Print(" ", g.expectedSeqNum)
 	}
 	fmt.Println()
 }
 
-func (f *flow) onAck(packet *packet.Packet) {
-	ackNum := packet.TCP.AckNum().RelativeTo(f.local.initSeqNum)
+func (f *flow) onAck(p *flowPacket) {
+	ackNum := p.packet.TCP.AckNum().RelativeTo(f.local.initSeqNum)
 	for i, g := range f.inflight {
 		// Consider adding "flowPacket" wrapping packet and flow-related information (is local, expected seq num).
-		expSeqNum := f.getExpectedSeqNum(g)
+		expSeqNum := g.expectedSeqNum
 		if ackNum == expSeqNum {
 			f.inflight = f.inflight[i+1:]
 			// what if there are many packets acknowledged?
-			fmt.Println("got ack match: ", i, ackNum, "rtt:", packet.Record.Timestamp()-g.Record.Timestamp(), "us")
+			fmt.Println("got ack match: ", i, ackNum, "rtt:", p.packet.Record.Timestamp()-g.packet.Record.Timestamp(), "us")
 		}
 	}
 }
 
-func (f *flow) getExpectedSeqNum(packet *packet.Packet) uint32 {
-	payloadSize := uint32(packet.PayloadSize())
-	if f.isLocalToRemote(packet) {
-		// FIXME: handle next syn at integer boundaries gracefully.
-		relSyn := packet.TCP.SeqNum().RelativeTo(f.local.initSeqNum)
-		return relSyn + payloadSize
-	}
-	if f.isRemoteToLocal(packet) {
-		relSyn := packet.TCP.SeqNum().RelativeTo(f.remote.initSeqNum)
-		return relSyn + payloadSize
-	}
-	// This should never happen since all the packets for a flow should be either local-to-remote or remote-to-local.
-	panic(fmt.Sprintf("getExpectedSeqNum invoked for packet that does not belong to the flow. flow: %v, packet: %v", f, packet))
+func (f *flow) isReady() bool {
+	return f.gotSyn && f.gotSynAck
 }
 
-func (f *flow) fmtPacket(packet *packet.Packet) string {
-	msg := fmt.Sprintf("%d", packet.Record.Timestamp()-f.initTimestamp)
-	msg += fmt.Sprintf(" %s %d -> %s %d", packet.IP.SourceIP(), packet.TCP.SourcePort(), packet.IP.DestIP(), packet.TCP.DestPort())
-	if packet.TCP.IsSyn() {
-		msg += " syn"
+func (f *flow) panicIfNotReady() {
+	if !f.isReady() {
+		panic("did not get syn nor syn+ack")
 	}
-	if packet.TCP.IsAck() {
-		msg += " ack"
+}
+
+func (f *flow) createSynFlowPacket(packet *packet.Packet) *flowPacket {
+	return &flowPacket{
+		packet:            packet,
+		relativeTimestamp: f.getRelativeTimestamp(packet),
+		direction:         localToRemote,
+		relativeSeqNum:    0,
+		relativeAckNum:    0,
+		expectedSeqNum:    1,
 	}
-	payloadSize := uint32(packet.PayloadSize())
+}
+
+func (f *flow) createSynAckFlowPacket(packet *packet.Packet) *flowPacket {
+	return &flowPacket{
+		packet:            packet,
+		relativeTimestamp: f.getRelativeTimestamp(packet),
+		direction:         remoteToLocal,
+		relativeSeqNum:    0,
+		relativeAckNum:    0,
+		expectedSeqNum:    1,
+	}
+}
+
+func (f *flow) createFlowPacket(packet *packet.Packet) *flowPacket {
+	f.panicIfNotReady()
+
+	flowPacket := &flowPacket{
+		packet:            packet,
+		relativeTimestamp: f.getRelativeTimestamp(packet),
+	}
+
 	if f.isLocalToRemote(packet) {
-		relSyn := packet.TCP.SeqNum().RelativeTo(f.local.initSeqNum)
-		relAck := packet.TCP.AckNum().RelativeTo(f.remote.initSeqNum)
+		flowPacket.direction = localToRemote
+		flowPacket.relativeSeqNum = packet.TCP.SeqNum().RelativeTo(f.local.initSeqNum)
+		flowPacket.relativeAckNum = packet.TCP.AckNum().RelativeTo(f.remote.initSeqNum)
 		// FIXME: handle next syn at integer boundaries gracefully.
-		nextSyn := relSyn + payloadSize
-		msg += fmt.Sprintf(" >  %d. seq %d (exp %d) ack %d", payloadSize, relSyn, nextSyn, relAck)
+		flowPacket.expectedSeqNum = flowPacket.relativeSeqNum.ExpectedForPayload(packet.PayloadSize())
+	} else if f.isRemoteToLocal(packet) {
+		flowPacket.direction = remoteToLocal
+		flowPacket.relativeSeqNum = packet.TCP.SeqNum().RelativeTo(f.remote.initSeqNum)
+		flowPacket.relativeAckNum = packet.TCP.AckNum().RelativeTo(f.local.initSeqNum)
+		flowPacket.expectedSeqNum = flowPacket.relativeSeqNum.ExpectedForPayload(packet.PayloadSize())
+	} else {
+		panic("Unknown direction!")
 	}
-	if f.isRemoteToLocal(packet) {
-		relSyn := packet.TCP.SeqNum().RelativeTo(f.remote.initSeqNum)
-		relAck := packet.TCP.AckNum().RelativeTo(f.local.initSeqNum)
-		nextSyn := relSyn + payloadSize
-		msg += fmt.Sprintf("  < %d. seq %d (exp %d) ack %d", payloadSize, relSyn, nextSyn, relAck)
-	}
-	return msg
+
+	return flowPacket
+}
+
+func (f *flow) getRelativeTimestamp(packet *packet.Packet) uint64 {
+	return packet.Record.Timestamp() - f.initTimestamp
 }
 
 // isLocalToRemote indicates if a packet represents a packet going from local to remote.
@@ -142,4 +197,24 @@ func (f *flow) isRemoteToLocal(packet *packet.Packet) bool {
 		f.remote.port == packet.TCP.SourcePort() &&
 		f.local.ip == packet.IP.DestIP() &&
 		f.local.port == packet.TCP.DestPort()
+}
+
+func (p *flowPacket) String() string {
+	msg := fmt.Sprintf("%d", p.relativeTimestamp)
+	msg += fmt.Sprintf(" %s %d -> %s %d", p.packet.IP.SourceIP(), p.packet.TCP.SourcePort(), p.packet.IP.DestIP(), p.packet.TCP.DestPort())
+	if p.packet.TCP.IsSyn() {
+		msg += " syn"
+	}
+	if p.packet.TCP.IsAck() {
+		msg += " ack"
+	}
+	if p.direction == localToRemote {
+		msg += ">  "
+	}
+	if p.direction == remoteToLocal {
+		msg += " < "
+	}
+
+	msg += fmt.Sprintf("%d. seq %d (exp %d) ack %d", p.packet.PayloadSize(), p.relativeSeqNum, p.expectedSeqNum, p.relativeAckNum)
+	return msg
 }
