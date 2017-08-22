@@ -32,30 +32,6 @@ type flow struct {
 	inflight      []*flowPacket
 }
 
-// initSeqNum is initial sequence number.
-type flowDetails struct {
-	ip         pcap.IPv4
-	port       uint16
-	initSeqNum pcap.SeqNum
-}
-
-// flowPacket is a packet.Packet with flow context
-type flowPacket struct {
-	relativeTimestamp uint64
-	packet            *packet.Packet
-	direction         flowPacketDirection
-	relativeSeqNum    pcap.SeqNum
-	relativeAckNum    pcap.SeqNum
-	expectedAckNum    pcap.SeqNum
-}
-
-type flowPacketDirection int
-
-const (
-	localToRemote flowPacketDirection = iota
-	remoteToLocal
-)
-
 func (f *flow) consumePacket(packet *packet.Packet) *flowPacket {
 	// TODO: Handle flows without syn and syn+ack, and out-of-order.
 	if packet.TCP.IsSyn() && !packet.TCP.IsAck() {
@@ -192,6 +168,30 @@ func (f *flow) isRemoteToLocal(packet *packet.Packet) bool {
 		f.local.ip == packet.IP.DestIP() &&
 		f.local.port == packet.TCP.DestPort()
 }
+
+// initSeqNum is initial sequence number.
+type flowDetails struct {
+	ip         pcap.IPv4
+	port       uint16
+	initSeqNum pcap.SeqNum
+}
+
+// flowPacket is a packet.Packet with flow context
+type flowPacket struct {
+	relativeTimestamp uint64
+	packet            *packet.Packet
+	direction         flowPacketDirection
+	relativeSeqNum    pcap.SeqNum
+	relativeAckNum    pcap.SeqNum
+	expectedAckNum    pcap.SeqNum
+}
+
+type flowPacketDirection int
+
+const (
+	localToRemote flowPacketDirection = iota
+	remoteToLocal
+)
 
 func (p *flowPacket) String() string {
 	msg := fmt.Sprintf("%d", p.relativeTimestamp)
