@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"jakub-m/bdp/packet"
 	"jakub-m/bdp/pcap"
+	"log"
 )
 
 func ProcessPackets(packets []*packet.Packet) error {
@@ -30,7 +31,32 @@ type flow struct {
 	local         flowDetails
 	remote        flowDetails
 	inflight      []*flowPacket
+	stats         []*flowStat
 }
+
+// initSeqNum is initial sequence number.
+type flowDetails struct {
+	ip         pcap.IPv4
+	port       uint16
+	initSeqNum pcap.SeqNum
+}
+
+// flowPacket is a packet.Packet with flow context
+type flowPacket struct {
+	relativeTimestamp uint64
+	packet            *packet.Packet
+	direction         flowPacketDirection
+	relativeSeqNum    pcap.SeqNum
+	relativeAckNum    pcap.SeqNum
+	expectedAckNum    pcap.SeqNum
+}
+
+type flowPacketDirection int
+
+const (
+	localToRemote flowPacketDirection = iota
+	remoteToLocal
+)
 
 func (f *flow) consumePacket(packet *packet.Packet) *flowPacket {
 	// TODO: Handle flows without syn and syn+ack, and out-of-order.
@@ -90,7 +116,15 @@ func (f *flow) onAck(p *flowPacket) {
 		if p.relativeAckNum == g.expectedAckNum {
 			// All inflight packets up to i are confirmed, so the ones before can be dropped.
 			f.inflight = f.inflight[i+1:]
-			fmt.Println("got ack match: ", i, p.relativeAckNum, "rtt:", p.packet.Record.Timestamp()-g.packet.Record.Timestamp(), "us")
+			rtt := p.packet.Record.Timestamp() - g.packet.Record.Timestamp()
+			stat := &flowStat{
+				// Note that relativeTimestampUSec is the timestmap of the ACK-ing packet, not the original packet.
+				relativeTimestampUSec: p.relativeTimestamp,
+				rttUSec:               rtt,
+			}
+			log.Printf("Got ack for inflight packet: ackNum=%d. %s", p.relativeAckNum, stat)
+			f.stats = append(f.stats, stat)
+			return
 		}
 	}
 }
@@ -169,30 +203,6 @@ func (f *flow) isRemoteToLocal(packet *packet.Packet) bool {
 		f.local.port == packet.TCP.DestPort()
 }
 
-// initSeqNum is initial sequence number.
-type flowDetails struct {
-	ip         pcap.IPv4
-	port       uint16
-	initSeqNum pcap.SeqNum
-}
-
-// flowPacket is a packet.Packet with flow context
-type flowPacket struct {
-	relativeTimestamp uint64
-	packet            *packet.Packet
-	direction         flowPacketDirection
-	relativeSeqNum    pcap.SeqNum
-	relativeAckNum    pcap.SeqNum
-	expectedAckNum    pcap.SeqNum
-}
-
-type flowPacketDirection int
-
-const (
-	localToRemote flowPacketDirection = iota
-	remoteToLocal
-)
-
 func (p *flowPacket) String() string {
 	msg := fmt.Sprintf("%d", p.relativeTimestamp)
 	msg += fmt.Sprintf(" %s %d -> %s %d", p.packet.IP.SourceIP(), p.packet.TCP.SourcePort(), p.packet.IP.DestIP(), p.packet.TCP.DestPort())
@@ -211,4 +221,14 @@ func (p *flowPacket) String() string {
 
 	msg += fmt.Sprintf("%d. seq %d (exp %d) ack %d", p.packet.PayloadSize(), p.relativeSeqNum, p.expectedAckNum, p.relativeAckNum)
 	return msg
+}
+
+// Single data point for flow statistics.
+type flowStat struct {
+	relativeTimestampUSec uint64
+	rttUSec               uint64
+}
+
+func (s *flowStat) String() string {
+	return fmt.Sprintf("ts: %d msec, rtt: %d msec", s.relativeTimestampUSec/1000, s.rttUSec/1000)
 }
