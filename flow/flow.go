@@ -99,31 +99,28 @@ func (f *flow) onSend(p *flowPacket) {
 	if p.packet.PayloadSize() == 0 {
 		return
 	}
-	f.inflight = append(f.inflight, p)
-	fmt.Print("inflight ", len(f.inflight))
-	for _, g := range f.inflight {
-		fmt.Print(" ", g.expectedAckNum)
+	// Assert that packets are sorted by expectedAckNum.
+	if len(f.inflight) > 0 {
+		lastInflight := f.inflight[len(f.inflight)-1]
+		if lastInflight.expectedAckNum >= p.expectedAckNum {
+			panic(fmt.Sprintf("Wrong order of expectedAckNum. last inflight %s, current %s", lastInflight.String(), p.String()))
+		}
 	}
-	fmt.Println()
+	f.inflight = append(f.inflight, p)
 }
 
 func (f *flow) onAck(p *flowPacket) {
 	for i, g := range f.inflight {
-		// Consider adding "flowPacket" wrapping packet and flow-related information (is local, expected seq num).
 		if p.relativeAckNum == g.expectedAckNum {
+			// All inflight packets up to i are confirmed, so the ones before can be dropped.
 			f.inflight = f.inflight[i+1:]
-			// what if there are many packets acknowledged?
 			fmt.Println("got ack match: ", i, p.relativeAckNum, "rtt:", p.packet.Record.Timestamp()-g.packet.Record.Timestamp(), "us")
 		}
 	}
 }
 
-func (f *flow) isReady() bool {
-	return f.gotSyn && f.gotSynAck
-}
-
 func (f *flow) panicIfNotReady() {
-	if !f.isReady() {
+	if !(f.gotSyn && f.gotSynAck) {
 		panic("did not get syn nor syn+ack")
 	}
 }
