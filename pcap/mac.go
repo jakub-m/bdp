@@ -35,7 +35,7 @@ func init() {
 	etherHdrSize = int(unsafe.Sizeof(*etherHdr))
 }
 
-func ParseEtherFrame(raw []byte) (*Ether, error) {
+func ParseEtherPacket(raw []byte) (*Ether, error) {
 	reader := bytes.NewReader(raw)
 	header := &etherHdr{}
 	nRead := 0

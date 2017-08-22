@@ -34,32 +34,32 @@ func (p IPv4) String() string {
 	return fmt.Sprintf("%d.%d.%d.%d", p[0], p[1], p[2], p[3])
 }
 
-type IpFrame struct {
+type IpPacket struct {
 	hdr  *ipHdr
 	Data []byte
 }
 
-func (f *IpFrame) SourceIP() IPv4 {
+func (f *IpPacket) SourceIP() IPv4 {
 	return f.hdr.SourceIP
 }
 
-func (f *IpFrame) DestIP() IPv4 {
+func (f *IpPacket) DestIP() IPv4 {
 	return f.hdr.DestIP
 }
 
-func (f *IpFrame) TotalLength() uint16 {
+func (f *IpPacket) TotalLength() uint16 {
 	return f.hdr.TotalLength
 }
 
-func (f *IpFrame) HeaderLength() uint16 {
+func (f *IpPacket) HeaderLength() uint16 {
 	return uint16(f.hdr.headerLength())
 }
 
-func (f *IpFrame) String() string {
+func (f *IpPacket) String() string {
 	return fmt.Sprintf("IP {Ver %d, hdr len %d, %s -> %s, data=%d}", f.hdr.version(), f.hdr.headerLength(), f.hdr.SourceIP.String(), f.hdr.DestIP.String(), len(f.Data))
 }
 
-func ParseIPV4Frame(raw []byte) (*IpFrame, error) {
+func ParseIPV4Packet(raw []byte) (*IpPacket, error) {
 	reader := bytes.NewReader(raw)
 	header := &ipHdr{}
 	err := binary.Read(reader, binary.BigEndian, header)
@@ -71,7 +71,7 @@ func ParseIPV4Frame(raw []byte) (*IpFrame, error) {
 		return nil, fmt.Errorf("Expected IP version 4 , got %#x", header.version())
 	}
 
-	return &IpFrame{
+	return &IpPacket{
 		hdr:  header,
 		Data: raw[header.headerLength():],
 	}, nil

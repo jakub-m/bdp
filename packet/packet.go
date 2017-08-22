@@ -1,26 +1,26 @@
-package frames
+package packet
 
 import (
 	"io"
 	"jakub-m/bdp/pcap"
 )
 
-type Frame struct {
+type Packet struct {
 	Record *pcap.PcapRecord
 	Ether  *pcap.Ether
-	IP     *pcap.IpFrame
-	TCP    *pcap.TcpFrame
+	IP     *pcap.IpPacket
+	TCP    *pcap.TcpPacket
 }
 
 // PayloadSize returns size of TCP payload.
-func (f *Frame) PayloadSize() uint16 {
+func (f *Packet) PayloadSize() uint16 {
 	return f.IP.TotalLength() - f.IP.HeaderLength() - f.TCP.HeaderSize()
 }
 
-type processFrameFunc func(f *Frame) error
+type processPacketFunc func(f *Packet) error
 
-func LoadFromFile(r io.Reader) ([]*Frame, error) {
-	frames := []*Frame{}
+func LoadFromFile(r io.Reader) ([]*Packet, error) {
+	packets := []*Packet{}
 
 	p, err := pcap.NewPcap(r)
 	if err != nil {
@@ -30,37 +30,37 @@ func LoadFromFile(r io.Reader) ([]*Frame, error) {
 	for {
 		record, err := p.NextRecord()
 		if err == io.EOF {
-			return frames, nil
+			return packets, nil
 		}
 		if err != nil {
 			return nil, err
 		}
 
-		frame, err := createFrameFromRecord(record)
+		packet, err := createPacketFromRecord(record)
 		if err != nil {
 			return nil, err
 		}
-		frames = append(frames, frame)
+		packets = append(packets, packet)
 	}
 }
 
-func createFrameFromRecord(record *pcap.PcapRecord) (*Frame, error) {
-	eth, err := pcap.ParseEtherFrame(record.Data)
+func createPacketFromRecord(record *pcap.PcapRecord) (*Packet, error) {
+	eth, err := pcap.ParseEtherPacket(record.Data)
 	if err != nil {
 		return nil, err
 	}
 
-	ip, err := pcap.ParseIPV4Frame(eth.Data)
+	ip, err := pcap.ParseIPV4Packet(eth.Data)
 	if err != nil {
 		return nil, err
 	}
 
-	tcp, err := pcap.ParseTCPFrame(ip.Data)
+	tcp, err := pcap.ParseTCPPacket(ip.Data)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Frame{
+	return &Packet{
 		Record: record,
 		Ether:  eth,
 		IP:     ip,

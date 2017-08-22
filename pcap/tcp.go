@@ -24,11 +24,11 @@ func (s SeqNum) RelativeTo(r SeqNum) uint32 {
 	return uint32(s) - uint32(r)
 }
 
-type TcpFrame struct {
+type TcpPacket struct {
 	hdr *tcpHdr
 }
 
-func (f *TcpFrame) String() string {
+func (f *TcpPacket) String() string {
 	syn := ""
 	ack := ""
 	if f.IsSyn() {
@@ -40,36 +40,36 @@ func (f *TcpFrame) String() string {
 	return fmt.Sprintf("TCP %s%s%+v", syn, ack, f.hdr)
 }
 
-func (f *TcpFrame) IsSyn() bool {
+func (f *TcpPacket) IsSyn() bool {
 	return f.hdr.Offset_Flags&0x0002 != 0
 }
 
-func (f *TcpFrame) IsAck() bool {
+func (f *TcpPacket) IsAck() bool {
 	return f.hdr.Offset_Flags&0x0010 != 0
 }
 
-func (f *TcpFrame) SeqNum() SeqNum {
+func (f *TcpPacket) SeqNum() SeqNum {
 	return f.hdr.SeqNum
 }
 
-func (f *TcpFrame) AckNum() SeqNum {
+func (f *TcpPacket) AckNum() SeqNum {
 	return f.hdr.AckNum
 }
 
-func (f *TcpFrame) SourcePort() uint16 {
+func (f *TcpPacket) SourcePort() uint16 {
 	return f.hdr.SourcePort
 }
 
-func (f *TcpFrame) DestPort() uint16 {
+func (f *TcpPacket) DestPort() uint16 {
 	return f.hdr.DestPort
 }
 
 // HeaderSize gives size of the TCP header in bytes.
-func (f *TcpFrame) HeaderSize() uint16 {
+func (f *TcpPacket) HeaderSize() uint16 {
 	return (f.hdr.Offset_Flags & 0xF000 >> 12) * 4
 }
 
-func ParseTCPFrame(raw []byte) (*TcpFrame, error) {
+func ParseTCPPacket(raw []byte) (*TcpPacket, error) {
 	reader := bytes.NewReader(raw)
 	header := &tcpHdr{}
 	err := binary.Read(reader, binary.BigEndian, header)
@@ -77,7 +77,7 @@ func ParseTCPFrame(raw []byte) (*TcpFrame, error) {
 		return nil, err
 	}
 
-	return &TcpFrame{
+	return &TcpPacket{
 		hdr: header,
 	}, nil
 }

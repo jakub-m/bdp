@@ -1,6 +1,6 @@
 package pcap
 
-// Rudimentary support of reading basic info from TCP frames.
+// Rudimentary support of reading basic info from TCP packets.
 
 import (
 	"encoding/binary"

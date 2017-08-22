@@ -2,7 +2,7 @@ package main
 
 import (
 	"jakub-m/bdp/flow"
-	"jakub-m/bdp/frames"
+	"jakub-m/bdp/packet"
 	"log"
 	"os"
 )
@@ -16,11 +16,11 @@ func main() {
 	}
 	defer file.Close()
 
-	frames, err := frames.LoadFromFile(file)
+	packets, err := packet.LoadFromFile(file)
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = flow.ProcessFrames(frames)
+	err = flow.ProcessPackets(packets)
 	if err != nil {
 		log.Fatal(err)
 	}
