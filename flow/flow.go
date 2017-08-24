@@ -7,6 +7,10 @@ import (
 	"log"
 )
 
+const (
+	usecInSec = 1000 * 1000
+)
+
 func ProcessPackets(packets []*packet.Packet) error {
 	flow := &flow{
 		gotSyn:    false,
@@ -24,6 +28,8 @@ func ProcessPackets(packets []*packet.Packet) error {
 // local is the side that initiates connection (syn).
 // remote is the other side of the connection (syn ack).
 // inflight are the files that are sent from local to remote and are not yet acknowledged.
+// deliveredTime is time of the most recent ACK, as in BBR paper.
+// delivered is sum of bytes delivered, as in BBR paper.
 type flow struct {
 	initTimestamp uint64
 	gotSyn        bool
@@ -32,6 +38,8 @@ type flow struct {
 	remote        flowDetails
 	inflight      []*flowPacket
 	stats         []*flowStat
+	deliveredTime uint64
+	delivered     uint32
 }
 
 // initSeqNum is initial sequence number.
@@ -49,6 +57,8 @@ type flowPacket struct {
 	relativeSeqNum    pcap.SeqNum
 	relativeAckNum    pcap.SeqNum
 	expectedAckNum    pcap.SeqNum
+	deliveredTime     uint64
+	delivered         uint32
 }
 
 type flowPacketDirection int
@@ -108,25 +118,39 @@ func (f *flow) onSend(p *flowPacket) {
 			panic(fmt.Sprintf("Wrong order of expectedAckNum. last inflight %s, current %s", lastInflight.String(), p.String()))
 		}
 	}
+	p.delivered = f.delivered
+	p.deliveredTime = f.deliveredTime
 	f.inflight = append(f.inflight, p)
 }
 
-func (f *flow) onAck(p *flowPacket) {
+func (f *flow) onAck(ack *flowPacket) {
+	sent, i, ok := f.findPacketSent(ack)
+	if !ok {
+		return
+	}
+
+	rtt := ack.packet.Record.Timestamp() - sent.packet.Record.Timestamp()
+	f.delivered += uint32(sent.packet.PayloadSize())
+	f.deliveredTime = ack.packet.Record.Timestamp()
+	deliveryRate := usecInSec * float32(f.delivered-sent.delivered) / float32(f.deliveredTime-sent.deliveredTime)
+
+	stat := &flowStat{
+		// Note that relativeTimestampUSec is the timestmap of the ACK-ing packet, not the original packet.
+		relativeTimestampUSec: ack.relativeTimestamp,
+		rttUSec:               rtt,
+	}
+	log.Printf("Got ack for inflight packet: ackNum=%d, rate=%gB/s, %s", ack.relativeAckNum, deliveryRate, stat)
+	f.stats = append(f.stats, stat)
+	f.inflight = f.inflight[i+1:]
+}
+
+func (f *flow) findPacketSent(ack *flowPacket) (sent *flowPacket, inflightIndex int, ok bool) {
 	for i, g := range f.inflight {
-		if p.relativeAckNum == g.expectedAckNum {
-			// All inflight packets up to i are confirmed, so the ones before can be dropped.
-			f.inflight = f.inflight[i+1:]
-			rtt := p.packet.Record.Timestamp() - g.packet.Record.Timestamp()
-			stat := &flowStat{
-				// Note that relativeTimestampUSec is the timestmap of the ACK-ing packet, not the original packet.
-				relativeTimestampUSec: p.relativeTimestamp,
-				rttUSec:               rtt,
-			}
-			log.Printf("Got ack for inflight packet: ackNum=%d. %s", p.relativeAckNum, stat)
-			f.stats = append(f.stats, stat)
-			return
+		if ack.relativeAckNum == g.expectedAckNum {
+			return g, i, true
 		}
 	}
+	return nil, -1, false
 }
 
 func (f *flow) panicIfNotReady() {
