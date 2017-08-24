@@ -18,8 +18,11 @@ func ProcessPackets(packets []*packet.Packet) error {
 	}
 
 	for _, f := range packets {
-		fp := flow.consumePacket(f)
-		fmt.Println(fp.String())
+		if fp, err := flow.consumePacket(f); err == nil {
+			fmt.Println(fp.String())
+		} else {
+			log.Println(err)
+		}
 	}
 	return nil
 }
@@ -68,26 +71,29 @@ const (
 	remoteToLocal
 )
 
-func (f *flow) consumePacket(packet *packet.Packet) *flowPacket {
+func (f *flow) consumePacket(packet *packet.Packet) (*flowPacket, error) {
 	// TODO: Handle flows without syn and syn+ack, and out-of-order.
 	if packet.TCP.IsSyn() && !packet.TCP.IsAck() {
 		flowPacket := f.createSynFlowPacket(packet)
 		f.onSyn(flowPacket)
-		return flowPacket
+		return flowPacket, nil
 	} else if packet.TCP.IsSyn() && packet.TCP.IsAck() {
 		flowPacket := f.createSynAckFlowPacket(packet)
 		f.onSynAck(flowPacket)
-		return flowPacket
+		return flowPacket, nil
 	} else {
 		flowPacket := f.createFlowPacket(packet)
 		if flowPacket.direction == localToRemote {
-			f.onSend(flowPacket)
+			err := f.onSend(flowPacket)
+			if err != nil {
+				return nil, err
+			}
 		} else if flowPacket.direction == remoteToLocal && flowPacket.packet.TCP.IsAck() {
 			f.onAck(flowPacket)
 		} else {
 			panic("direction not set!")
 		}
-		return flowPacket
+		return flowPacket, nil
 	}
 }
 
@@ -107,20 +113,21 @@ func (f *flow) onSynAck(p *flowPacket) {
 }
 
 // Packets sent are inflight until acknowledged. Only packets with payload are expected to be acknowledged (i.e. pure 'acks' with no payload do not count as inflight.)
-func (f *flow) onSend(p *flowPacket) {
+func (f *flow) onSend(p *flowPacket) error {
 	if p.packet.PayloadSize() == 0 {
-		return
+		return nil
 	}
 	// Assert that packets are sorted by expectedAckNum.
 	if len(f.inflight) > 0 {
 		lastInflight := f.inflight[len(f.inflight)-1]
 		if lastInflight.expectedAckNum >= p.expectedAckNum {
-			panic(fmt.Sprintf("Wrong order of expectedAckNum. last inflight %s, current %s", lastInflight.String(), p.String()))
+			return fmt.Errorf("Wrong order of expectedAckNum. last inflight %s, current %s", lastInflight, p)
 		}
 	}
 	p.delivered = f.delivered
 	p.deliveredTime = f.deliveredTime
 	f.inflight = append(f.inflight, p)
+	return nil
 }
 
 func (f *flow) onAck(ack *flowPacket) {
@@ -139,7 +146,7 @@ func (f *flow) onAck(ack *flowPacket) {
 		relativeTimestampUSec: ack.relativeTimestamp,
 		rttUSec:               rtt,
 	}
-	log.Printf("Got ack for inflight packet: ackNum=%d, rate=%gB/s, %s", ack.relativeAckNum, deliveryRate, stat)
+	log.Printf("Got ack for inflight packet: ackNum=%d, rate=%.1fkb/s, %s", ack.relativeAckNum, deliveryRate/1000*8, stat)
 	f.stats = append(f.stats, stat)
 	f.inflight = f.inflight[i+1:]
 }
