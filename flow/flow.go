@@ -236,21 +236,20 @@ func (f *flow) isRemoteToLocal(packet *packet.Packet) bool {
 
 func (p *flowPacket) String() string {
 	msg := fmt.Sprintf("%d", p.relativeTimestamp)
-	msg += fmt.Sprintf(" %s %d -> %s %d", p.packet.IP.SourceIP(), p.packet.TCP.SourcePort(), p.packet.IP.DestIP(), p.packet.TCP.DestPort())
+
+	if p.direction == localToRemote {
+		msg += fmt.Sprintf(" %s >  %s", p.packet.IP.SourceIP(), p.packet.IP.DestIP())
+	} else if p.direction == remoteToLocal {
+		msg += fmt.Sprintf(" %s  < %s", p.packet.IP.DestIP(), p.packet.IP.SourceIP())
+	}
 	if p.packet.TCP.IsSyn() {
 		msg += " syn"
 	}
 	if p.packet.TCP.IsAck() {
 		msg += " ack"
 	}
-	if p.direction == localToRemote {
-		msg += ">  "
-	}
-	if p.direction == remoteToLocal {
-		msg += " < "
-	}
 
-	msg += fmt.Sprintf("%d. seq %d (exp %d) ack %d", p.packet.PayloadSize(), p.relativeSeqNum, p.expectedAckNum, p.relativeAckNum)
+	msg += fmt.Sprintf(" %d. seq %d (exp %d) ack %d", p.packet.PayloadSize(), p.relativeSeqNum, p.expectedAckNum, p.relativeAckNum)
 	return msg
 }
 
