@@ -19,7 +19,7 @@ func ProcessPackets(packets []*packet.Packet) error {
 
 	for _, f := range packets {
 		if fp, err := flow.consumePacket(f); err == nil {
-			fmt.Println(fp.String())
+			log.Println(fp.String())
 		} else {
 			log.Println(err)
 		}
@@ -43,6 +43,7 @@ type flow struct {
 	stats         []*flowStat
 	deliveredTime uint64
 	delivered     uint32
+	cbAckInFlight func(*flowStat)
 }
 
 // initSeqNum is initial sequence number.
@@ -139,14 +140,16 @@ func (f *flow) onAck(ack *flowPacket) {
 	rtt := ack.packet.Record.Timestamp() - sent.packet.Record.Timestamp()
 	f.delivered += uint32(sent.packet.PayloadSize())
 	f.deliveredTime = ack.packet.Record.Timestamp()
-	deliveryRate := usecInSec * float32(f.delivered-sent.delivered) / float32(f.deliveredTime-sent.deliveredTime)
+	deliveryRate := 8 * usecInSec * float32(f.delivered-sent.delivered) / float32(f.deliveredTime-sent.deliveredTime)
 
 	stat := &flowStat{
 		// Note that relativeTimestampUSec is the timestmap of the ACK-ing packet, not the original packet.
 		relativeTimestampUSec: ack.relativeTimestamp,
 		rttUSec:               rtt,
+		deliveryRateBPS:       uint32(deliveryRate),
 	}
-	log.Printf("Got ack for inflight packet: ackNum=%d, rate=%.1fkb/s, %s", ack.relativeAckNum, deliveryRate/1000*8, stat)
+	log.Printf("Got ack for inflight packet: ackNum=%d, rate=%.0fkb/s, %s", ack.relativeAckNum, deliveryRate/1000, stat)
+	fmt.Println(stat.CSVString()) // Eventually remove it from here to a delegated callback
 	f.stats = append(f.stats, stat)
 	f.inflight = f.inflight[i+1:]
 }
@@ -257,8 +260,13 @@ func (p *flowPacket) String() string {
 type flowStat struct {
 	relativeTimestampUSec uint64
 	rttUSec               uint64
+	deliveryRateBPS       uint32
 }
 
 func (s *flowStat) String() string {
 	return fmt.Sprintf("ts: %d msec, rtt: %d msec", s.relativeTimestampUSec/1000, s.rttUSec/1000)
+}
+
+func (s *flowStat) CSVString() string {
+	return fmt.Sprintf("%d\t%d", s.deliveryRateBPS, s.rttUSec)
 }
