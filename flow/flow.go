@@ -44,7 +44,6 @@ type flow struct {
 // initSeqNum is initial sequence number.
 type flowDetails struct {
 	ip         pcap.IPv4
-	port       uint16
 	initSeqNum pcap.SeqNum
 }
 
@@ -75,7 +74,7 @@ func (f *flow) consumePacket(packet *packet.Packet) (*flowPacket, error) {
 		return f.newInitialFlowPacket(packet), nil
 	} else if f.local != nil && f.remote == nil {
 		// If has only local, either set remote, or update local.
-		if f.local.ip == packet.IP.SourceIP() && f.local.port == packet.TCP.SourcePort() {
+		if f.local.ip == packet.IP.SourceIP() {
 			f.local = newFlowDetailsFromSource(packet)
 		} else {
 			f.remote = newFlowDetailsFromSource(packet)
@@ -194,18 +193,12 @@ func (f *flow) getRelativeTimestamp(packet *packet.Packet) uint64 {
 
 // isLocalToRemote indicates if a packet represents a packet going from local to remote.
 func (f *flow) isLocalToRemote(packet *packet.Packet) bool {
-	return f.local.ip == packet.IP.SourceIP() &&
-		f.local.port == packet.TCP.SourcePort() &&
-		f.remote.ip == packet.IP.DestIP() &&
-		f.remote.port == packet.TCP.DestPort()
+	return f.local.ip == packet.IP.SourceIP() && f.remote.ip == packet.IP.DestIP()
 }
 
 // isRemoteToLocal indicates if a packet represents a packet going from remote to local.
 func (f *flow) isRemoteToLocal(packet *packet.Packet) bool {
-	return f.remote.ip == packet.IP.SourceIP() &&
-		f.remote.port == packet.TCP.SourcePort() &&
-		f.local.ip == packet.IP.DestIP() &&
-		f.local.port == packet.TCP.DestPort()
+	return f.remote.ip == packet.IP.SourceIP() && f.local.ip == packet.IP.DestIP()
 }
 
 func (p *flowPacket) String() string {
@@ -231,7 +224,6 @@ func (p *flowPacket) String() string {
 func newFlowDetailsFromSource(packet *packet.Packet) *flowDetails {
 	return &flowDetails{
 		ip:         packet.IP.SourceIP(),
-		port:       packet.TCP.SourcePort(),
 		initSeqNum: packet.TCP.SeqNum(),
 	}
 }
