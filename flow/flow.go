@@ -12,10 +12,7 @@ const (
 )
 
 func ProcessPackets(packets []*packet.Packet) error {
-	flow := &flow{
-		gotSyn:    false,
-		gotSynAck: false,
-	}
+	flow := &flow{}
 
 	for _, f := range packets {
 		if fp, err := flow.consumePacket(f); err == nil {
@@ -35,10 +32,8 @@ func ProcessPackets(packets []*packet.Packet) error {
 // delivered is sum of bytes delivered, as in BBR paper.
 type flow struct {
 	initTimestamp uint64
-	gotSyn        bool
-	gotSynAck     bool
-	local         flowDetails
-	remote        flowDetails
+	local         *flowDetails
+	remote        *flowDetails
 	inflight      []*flowPacket
 	stats         []*flowStat
 	deliveredTime uint64
@@ -73,17 +68,22 @@ const (
 )
 
 func (f *flow) consumePacket(packet *packet.Packet) (*flowPacket, error) {
-	// TODO: Handle flows without syn and syn+ack, and out-of-order.
-	if packet.TCP.IsSyn() && !packet.TCP.IsAck() {
-		flowPacket := f.createSynFlowPacket(packet)
-		f.onSyn(flowPacket)
-		return flowPacket, nil
-	} else if packet.TCP.IsSyn() && packet.TCP.IsAck() {
-		flowPacket := f.createSynAckFlowPacket(packet)
-		f.onSynAck(flowPacket)
-		return flowPacket, nil
-	} else {
+	if f.local == nil && f.remote == nil {
+		// If has neither local or remote, treat the first packet as local packet.
+		f.initTimestamp = packet.Record.Timestamp()
+		f.local = newFlowDetailsFromSource(packet)
+		return f.newInitialFlowPacket(packet), nil
+	} else if f.local != nil && f.remote == nil {
+		// If has only local, either set remote, or update local.
+		if f.local.ip == packet.IP.SourceIP() && f.local.port == packet.TCP.SourcePort() {
+			f.local = newFlowDetailsFromSource(packet)
+		} else {
+			f.remote = newFlowDetailsFromSource(packet)
+		}
+		return f.newInitialFlowPacket(packet), nil
+	} else if f.local != nil && f.remote != nil {
 		flowPacket := f.createFlowPacket(packet)
+		// If has both local and remote, do the proper processing.
 		if flowPacket.direction == localToRemote {
 			err := f.onSend(flowPacket)
 			if err != nil {
@@ -96,21 +96,7 @@ func (f *flow) consumePacket(packet *packet.Packet) (*flowPacket, error) {
 		}
 		return flowPacket, nil
 	}
-}
-
-func (f *flow) onSyn(p *flowPacket) {
-	f.local.ip = p.packet.IP.SourceIP()
-	f.local.port = p.packet.TCP.SourcePort()
-	f.local.initSeqNum = p.packet.TCP.SeqNum()
-	f.remote.ip = p.packet.IP.DestIP()
-	f.remote.port = p.packet.TCP.DestPort()
-	f.initTimestamp = p.packet.Record.Timestamp()
-	f.gotSyn = true
-}
-
-func (f *flow) onSynAck(p *flowPacket) {
-	f.remote.initSeqNum = p.packet.TCP.SeqNum()
-	f.gotSynAck = true
+	panic(fmt.Sprintf("BAD STATE, f.local=%+v, f.remote=%+v", f.local, f.remote))
 }
 
 // Packets sent are inflight until acknowledged. Only packets with payload are expected to be acknowledged (i.e. pure 'acks' with no payload do not count as inflight.)
@@ -163,24 +149,7 @@ func (f *flow) findPacketSent(ack *flowPacket) (sent *flowPacket, inflightIndex 
 	return nil, -1, false
 }
 
-func (f *flow) panicIfNotReady() {
-	if !(f.gotSyn && f.gotSynAck) {
-		panic("did not get syn nor syn+ack")
-	}
-}
-
-func (f *flow) createSynFlowPacket(packet *packet.Packet) *flowPacket {
-	return &flowPacket{
-		packet:            packet,
-		relativeTimestamp: f.getRelativeTimestamp(packet),
-		direction:         localToRemote,
-		relativeSeqNum:    0,
-		relativeAckNum:    0,
-		expectedAckNum:    1,
-	}
-}
-
-func (f *flow) createSynAckFlowPacket(packet *packet.Packet) *flowPacket {
+func (f *flow) newInitialFlowPacket(packet *packet.Packet) *flowPacket {
 	return &flowPacket{
 		packet:            packet,
 		relativeTimestamp: f.getRelativeTimestamp(packet),
@@ -192,7 +161,9 @@ func (f *flow) createSynAckFlowPacket(packet *packet.Packet) *flowPacket {
 }
 
 func (f *flow) createFlowPacket(packet *packet.Packet) *flowPacket {
-	f.panicIfNotReady()
+	if f.local == nil || f.remote == nil {
+		panic("local or remote is nil")
+	}
 
 	flowPacket := &flowPacket{
 		packet:            packet,
@@ -211,7 +182,7 @@ func (f *flow) createFlowPacket(packet *packet.Packet) *flowPacket {
 		flowPacket.relativeAckNum = packet.TCP.AckNum().RelativeTo(f.local.initSeqNum)
 		flowPacket.expectedAckNum = flowPacket.relativeSeqNum.ExpectedForPayload(packet.PayloadSize())
 	} else {
-		panic("Unknown direction!")
+		panic(fmt.Sprintf("Unknown direction! %s", packet))
 	}
 
 	return flowPacket
@@ -254,6 +225,15 @@ func (p *flowPacket) String() string {
 
 	msg += fmt.Sprintf(" %d. seq %d (exp %d) ack %d", p.packet.PayloadSize(), p.relativeSeqNum, p.expectedAckNum, p.relativeAckNum)
 	return msg
+}
+
+// newFlowDetailsFromSource creates *flowDetails from source of the packet (that is, not from destination).
+func newFlowDetailsFromSource(packet *packet.Packet) *flowDetails {
+	return &flowDetails{
+		ip:         packet.IP.SourceIP(),
+		port:       packet.TCP.SourcePort(),
+		initSeqNum: packet.TCP.SeqNum(),
+	}
 }
 
 // Single data point for flow statistics.
