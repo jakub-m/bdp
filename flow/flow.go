@@ -71,15 +71,22 @@ func (f *flow) consumePacket(packet *packet.Packet) (*flowPacket, error) {
 		// If has neither local or remote, treat the first packet as local packet.
 		f.initTimestamp = packet.Record.Timestamp()
 		f.local = newFlowDetailsFromSource(packet)
-		return f.newInitialFlowPacket(packet), nil
+		fp := f.newInitialFlowPacket(packet, localToRemote)
+		log.Printf("Initialize local: %s", fp)
+		return fp, nil
 	} else if f.local != nil && f.remote == nil {
 		// If has only local, either set remote, or update local.
 		if f.local.ip == packet.IP.SourceIP() {
 			f.local = newFlowDetailsFromSource(packet)
+			fp := f.newInitialFlowPacket(packet, localToRemote)
+			log.Printf("Update local: %s", fp)
+			return fp, nil
 		} else {
 			f.remote = newFlowDetailsFromSource(packet)
+			fp := f.newInitialFlowPacket(packet, remoteToLocal)
+			log.Printf("Initialize remote: %s", fp)
+			return fp, nil
 		}
-		return f.newInitialFlowPacket(packet), nil
 	} else if f.local != nil && f.remote != nil {
 		flowPacket := f.createFlowPacket(packet)
 		// If has both local and remote, do the proper processing.
@@ -148,11 +155,11 @@ func (f *flow) findPacketSent(ack *flowPacket) (sent *flowPacket, inflightIndex 
 	return nil, -1, false
 }
 
-func (f *flow) newInitialFlowPacket(packet *packet.Packet) *flowPacket {
+func (f *flow) newInitialFlowPacket(packet *packet.Packet, direction flowPacketDirection) *flowPacket {
 	return &flowPacket{
 		packet:            packet,
 		relativeTimestamp: f.getRelativeTimestamp(packet),
-		direction:         remoteToLocal,
+		direction:         direction,
 		relativeSeqNum:    0,
 		relativeAckNum:    0,
 		expectedAckNum:    1,
@@ -226,6 +233,10 @@ func newFlowDetailsFromSource(packet *packet.Packet) *flowDetails {
 		ip:         packet.IP.SourceIP(),
 		initSeqNum: packet.TCP.SeqNum(),
 	}
+}
+
+func (d *flowDetails) String() string {
+	return fmt.Sprintf("%s, seq: %d", d.ip, d.initSeqNum)
 }
 
 // Single data point for flow statistics.
