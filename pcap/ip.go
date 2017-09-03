@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"strconv"
+	"strings"
 )
 
 // https://en.wikipedia.org/wiki/IPv4
@@ -29,6 +31,22 @@ func (h *ipHdr) headerLength() uint8 {
 }
 
 type IPv4 [4]uint8
+
+func IPv4FromString(in string) (IPv4, error) {
+	s := strings.Split(in, ".")
+	if len(s) != 4 {
+		return IPv4{}, fmt.Errorf("Bad IP: %s", in)
+	}
+	bytes := [4]byte{}
+	for i, d := range s {
+		b, err := strconv.ParseUint(d, 10, 8)
+		if err != nil {
+			return IPv4{}, err
+		}
+		bytes[i] = uint8(b)
+	}
+	return IPv4(bytes), nil
+}
 
 func (p IPv4) String() string {
 	return fmt.Sprintf("%d.%d.%d.%d", p[0], p[1], p[2], p[3])
