@@ -11,11 +11,11 @@ const (
 	usecInSec = 1000 * 1000
 )
 
-func ProcessPackets(packets []*packet.Packet) error {
+func ProcessPackets(packets []*packet.Packet, localIP *pcap.IPv4) error {
 	flow := &flow{}
 
 	for _, f := range packets {
-		if fp, err := flow.consumePacket(f); err == nil {
+		if fp, err := flow.consumePacket(f, localIP); err == nil {
 			log.Println(fp.String())
 		} else {
 			log.Println(err)
@@ -66,8 +66,12 @@ const (
 	remoteToLocal
 )
 
-func (f *flow) consumePacket(packet *packet.Packet) (*flowPacket, error) {
+func (f *flow) consumePacket(packet *packet.Packet, localIP *pcap.IPv4) (*flowPacket, error) {
 	if f.local == nil && f.remote == nil {
+		if localIP != nil && *localIP != packet.IP.SourceIP() {
+			// If localIP is set, then all the flows that have local IP different will be filtered out.
+			return nil, fmt.Errorf("Dropping %s > %s (different local IP)", packet.IP.SourceIP(), packet.IP.DestIP())
+		}
 		// If has neither local or remote, treat the first packet as local packet.
 		f.initTimestamp = packet.Record.Timestamp()
 		f.local = newFlowDetailsFromSource(packet)

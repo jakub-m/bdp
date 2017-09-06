@@ -46,7 +46,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	err = flow.ProcessPackets(packets)
+	err = flow.ProcessPackets(packets, args.localIP)
 	if err != nil {
 		log.Fatal(err)
 	}
