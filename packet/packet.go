@@ -1,6 +1,7 @@
 package packet
 
 import (
+	"fmt"
 	"io"
 	"jakub-m/bdp/pcap"
 )
@@ -13,8 +14,12 @@ type Packet struct {
 }
 
 // PayloadSize returns size of TCP payload.
-func (f *Packet) PayloadSize() uint16 {
-	return f.IP.TotalLength() - f.IP.HeaderLength() - f.TCP.HeaderSize()
+func (p *Packet) PayloadSize() uint16 {
+	return p.IP.TotalLength() - p.IP.HeaderLength() - p.TCP.HeaderSize()
+}
+
+func (p *Packet) String() string {
+	return fmt.Sprintf("%dB %s %s", p.Record.OrigLen(), p.IP, p.TCP)
 }
 
 type processPacketFunc func(f *Packet) error

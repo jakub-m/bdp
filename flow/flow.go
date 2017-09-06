@@ -67,12 +67,18 @@ const (
 )
 
 func (f *flow) consumePacket(packet *packet.Packet, localIP *pcap.IPv4) (*flowPacket, error) {
+	if packet.IP.SourceIP() != *localIP && packet.IP.DestIP() != *localIP {
+		// Filter packets that surely do not belong to the flow.
+		return nil, fmt.Errorf("Dropping %s > %s (not in the flow)", packet.IP.SourceIP(), packet.IP.DestIP())
+	}
+
 	if f.local == nil && f.remote == nil {
-		if localIP != nil && *localIP != packet.IP.SourceIP() {
-			// If localIP is set, then all the flows that have local IP different will be filtered out.
-			return nil, fmt.Errorf("Dropping %s > %s (different local IP)", packet.IP.SourceIP(), packet.IP.DestIP())
-		}
 		// If has neither local or remote, treat the first packet as local packet.
+		if packet.IP.SourceIP() != *localIP {
+			// Filter packets that surely do not belong to the flow.
+			return nil, fmt.Errorf("Dropping %s > %s (different source IP)", packet.IP.SourceIP(), packet.IP.DestIP())
+		}
+
 		f.initTimestamp = packet.Record.Timestamp()
 		f.local = newFlowDetailsFromSource(packet)
 		fp := f.newInitialFlowPacket(packet, localToRemote)
@@ -92,7 +98,10 @@ func (f *flow) consumePacket(packet *packet.Packet, localIP *pcap.IPv4) (*flowPa
 			return fp, nil
 		}
 	} else if f.local != nil && f.remote != nil {
-		flowPacket := f.createFlowPacket(packet)
+		flowPacket, err := f.createFlowPacket(packet)
+		if err != nil {
+			return nil, err
+		}
 		// If has both local and remote, do the proper processing.
 		if flowPacket.direction == localToRemote {
 			err := f.onSend(flowPacket)
@@ -170,7 +179,7 @@ func (f *flow) newInitialFlowPacket(packet *packet.Packet, direction flowPacketD
 	}
 }
 
-func (f *flow) createFlowPacket(packet *packet.Packet) *flowPacket {
+func (f *flow) createFlowPacket(packet *packet.Packet) (*flowPacket, error) {
 	if f.local == nil || f.remote == nil {
 		panic("local or remote is nil")
 	}
@@ -192,10 +201,10 @@ func (f *flow) createFlowPacket(packet *packet.Packet) *flowPacket {
 		flowPacket.relativeAckNum = packet.TCP.AckNum().RelativeTo(f.local.initSeqNum)
 		flowPacket.expectedAckNum = flowPacket.relativeSeqNum.ExpectedForPayload(packet.PayloadSize())
 	} else {
-		panic(fmt.Sprintf("Unknown direction! %s", packet))
+		return nil, fmt.Errorf("Unknown direction! %s", packet)
 	}
 
-	return flowPacket
+	return flowPacket, nil
 }
 
 func (f *flow) getRelativeTimestamp(packet *packet.Packet) uint64 {
