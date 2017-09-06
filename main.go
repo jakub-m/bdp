@@ -41,7 +41,12 @@ func main() {
 	}
 	defer file.Close()
 
-	packets, err := packet.LoadFromFile(file)
+	onPcapError := func(err error) bool {
+		log.Printf("Packet reading error: %s", err)
+		return true
+	}
+
+	packets, err := packet.LoadFromFile(file, onPcapError)
 	if err != nil {
 		log.Fatal(err)
 	}

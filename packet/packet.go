@@ -19,7 +19,8 @@ func (f *Packet) PayloadSize() uint16 {
 
 type processPacketFunc func(f *Packet) error
 
-func LoadFromFile(r io.Reader) ([]*Packet, error) {
+// onError is called on packet read errors, return value is "should continue" - will break on false.
+func LoadFromFile(r io.Reader, onError func(error) bool) ([]*Packet, error) {
 	packets := []*Packet{}
 
 	p, err := pcap.NewPcap(r)
@@ -38,6 +39,9 @@ func LoadFromFile(r io.Reader) ([]*Packet, error) {
 
 		packet, err := createPacketFromRecord(record)
 		if err != nil {
+			if shouldContinue := onError(err); shouldContinue {
+				continue
+			}
 			return nil, err
 		}
 		packets = append(packets, packet)
