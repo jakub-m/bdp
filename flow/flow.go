@@ -11,11 +11,11 @@ const (
 	usecInSec = 1000 * 1000
 )
 
-func ProcessPackets(packets []*packet.Packet, localIP *pcap.IPv4) error {
+func ProcessPackets(packets []*packet.Packet, localIP, remoteIP *pcap.IPv4) error {
 	flow := &flow{}
 
 	for _, f := range packets {
-		if fp, err := flow.consumePacket(f, localIP); err == nil {
+		if fp, err := flow.consumePacket(f, localIP, remoteIP); err == nil {
 			log.Println(fp.String())
 		} else {
 			log.Println(err)
@@ -66,8 +66,9 @@ const (
 	remoteToLocal
 )
 
-func (f *flow) consumePacket(packet *packet.Packet, localIP *pcap.IPv4) (*flowPacket, error) {
-	if packet.IP.SourceIP() != *localIP && packet.IP.DestIP() != *localIP {
+func (f *flow) consumePacket(packet *packet.Packet, localIP, remoteIP *pcap.IPv4) (*flowPacket, error) {
+	if !((packet.IP.SourceIP() == *localIP && packet.IP.DestIP() == *remoteIP) ||
+		(packet.IP.SourceIP() == *remoteIP && packet.IP.DestIP() == *localIP)) {
 		// Filter packets that surely do not belong to the flow.
 		return nil, fmt.Errorf("Dropping %s > %s (not in the flow)", packet.IP.SourceIP(), packet.IP.DestIP())
 	}
@@ -75,17 +76,17 @@ func (f *flow) consumePacket(packet *packet.Packet, localIP *pcap.IPv4) (*flowPa
 	if f.local == nil && f.remote == nil {
 		// If has neither local or remote, treat the first packet as local packet.
 		if packet.IP.SourceIP() != *localIP {
-			// Filter packets that surely do not belong to the flow.
-			return nil, fmt.Errorf("Dropping %s > %s (different source IP)", packet.IP.SourceIP(), packet.IP.DestIP())
+			return nil, fmt.Errorf("Dropping %s > %s (not local-to-remote)", packet.IP.SourceIP(), packet.IP.DestIP())
 		}
 
 		f.initTimestamp = packet.Record.Timestamp()
-		f.local = newFlowDetailsFromSource(packet)
+		f.local = newFlowDetailsFromSource(packet) // TODO Simplify, since local IP is known.
 		fp := f.newInitialFlowPacket(packet, localToRemote)
 		log.Printf("Initialize local: %s", fp)
 		return fp, nil
 	} else if f.local != nil && f.remote == nil {
-		// If has only local, either set remote, or update local.
+		// If has only local, either set remote (in case of remote-to-local packet), or update local (in case
+		// of local-to-remote packet).
 		if f.local.ip == packet.IP.SourceIP() {
 			f.local = newFlowDetailsFromSource(packet)
 			fp := f.newInitialFlowPacket(packet, localToRemote)
