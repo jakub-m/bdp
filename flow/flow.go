@@ -11,6 +11,7 @@ const (
 	usecInSec = 1000 * 1000
 )
 
+// ProcessPackets iterates all the packets and produces RTT and bandwidth statistics.
 func ProcessPackets(packets []*packet.Packet, localIP, remoteIP *pcap.IPv4) error {
 	flow := &flow{}
 

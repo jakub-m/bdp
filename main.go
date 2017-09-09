@@ -6,6 +6,7 @@ import (
 	"jakub-m/bdp/flow"
 	"jakub-m/bdp/packet"
 	"jakub-m/bdp/pcap"
+	"jakub-m/bdp/stats"
 	"log"
 	"os"
 )
@@ -14,6 +15,7 @@ var args struct {
 	pcapFname string
 	localIP   *pcap.IPv4
 	remoteIP  *pcap.IPv4
+	statsMode bool
 }
 
 func init() {
@@ -22,6 +24,7 @@ func init() {
 	flag.StringVar(&args.pcapFname, "i", "", "pcap file")
 	flag.StringVar(&localIPString, "l", "", "local IP (e.g. 192.168.1.2)")
 	flag.StringVar(&remoteIPString, "r", "", "remote IP (e.g. 123.123.123.123)")
+	flag.BoolVar(&args.statsMode, "s", false, "Print rudimentary flow statistics")
 	flag.Parse()
 
 	args.localIP = ipFromStringOrExit(localIPString)
@@ -57,13 +60,20 @@ func main() {
 		return true
 	}
 
+	// Load all the packets to memory. It can be easily converted to streaming.
 	packets, err := packet.LoadFromFile(file, onPcapError)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	err = flow.ProcessPackets(packets, args.localIP, args.remoteIP)
-	if err != nil {
-		log.Fatal(err)
+	if args.statsMode {
+		// Stats mode.
+		stats.ProcessPackets(packets)
+	} else {
+		// BDP mode.
+		err = flow.ProcessPackets(packets, args.localIP, args.remoteIP)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 }
