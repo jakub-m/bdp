@@ -1,9 +1,0 @@
-#!/bin/bash
-
-set -eu
-
-dir=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
-
-input_fname=$1
-output_fname=${2:-output.png}
-gnuplot -e "input_fname='$input_fname'" -e "output_fname='$output_fname'" $dir/scatter.plot

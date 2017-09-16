@@ -12,9 +12,10 @@ import (
 const tpl = `
 set terminal png size 800,600
 set output "{{.OutputPath}}"
-# set logscale
-# set xrange [8e5:3e6]
-# set yrange [5e4:5e5]
+
+{{if .LogScale -}} set logscale {{- end}}
+{{if .XRange -}} set xrange [{{.XRange}}] {{- end}}
+{{if .YRange -}} set yrange [{{.YRange}}] {{- end}}
 
 plot "{{.InputPath}}" using 1:2:0 with points pointtype 1 pointsize 1 palette
 `
@@ -22,12 +23,18 @@ plot "{{.InputPath}}" using 1:2:0 with points pointtype 1 pointsize 1 palette
 var args struct {
 	InputPath  string
 	OutputPath string
+	LogScale   bool
+	XRange     string
+	YRange     string
 }
 
 func init() {
 	log.SetFlags(0)
 	flag.StringVar(&args.InputPath, "i", "", "input path (csv)")
 	flag.StringVar(&args.OutputPath, "o", "", "output path (png)")
+	flag.StringVar(&args.XRange, "xrange", "", "x range (e.g. \"8e5:3e6\")")
+	flag.StringVar(&args.YRange, "yrange", "", "y range (e.g. \"5e4:5e5\")")
+	flag.BoolVar(&args.LogScale, "log", false, "enable log scale")
 	flag.Parse()
 	if args.InputPath == "" {
 		log.Fatal("-i ?")
