@@ -9,12 +9,14 @@ import (
 
 const (
 	usecInSec = 1000 * 1000
+	csvHeader = "# bandwidth (bps)\trtt (usec)\twindow sent\twindow ack"
 )
 
 // ProcessPackets iterates all the packets and produces RTT and bandwidth statistics.
 func ProcessPackets(packets []*packet.Packet, localIP, remoteIP *pcap.IPv4) error {
 	flow := &flow{}
 
+	fmt.Println(csvHeader)
 	for _, f := range packets {
 		if fp, err := flow.consumePacket(f, localIP, remoteIP); err == nil {
 			log.Println(fp.String())
@@ -154,6 +156,8 @@ func (f *flow) onAck(ack *flowPacket) {
 		relativeTimestampUSec: ack.relativeTimestamp,
 		rttUSec:               rtt,
 		deliveryRateBPS:       uint32(deliveryRate),
+		sentWindowSize:        sent.packet.TCP.WindowSize(),
+		ackWindowSize:         ack.packet.TCP.WindowSize(),
 	}
 	log.Printf("Got ack for inflight packet: ackNum=%d, rate=%.0fkb/s, %s", ack.relativeAckNum, deliveryRate/1000, stat)
 	fmt.Println(stat.CSVString()) // Eventually remove it from here to a delegated callback
@@ -259,12 +263,14 @@ type flowStat struct {
 	relativeTimestampUSec uint64
 	rttUSec               uint64
 	deliveryRateBPS       uint32
+	sentWindowSize        uint16
+	ackWindowSize         uint16
 }
 
 func (s *flowStat) String() string {
-	return fmt.Sprintf("ts: %d msec, rtt: %d msec", s.relativeTimestampUSec/1000, s.rttUSec/1000)
+	return fmt.Sprintf("ts: %d msec, rtt: %d msec, win: %d, %d", s.relativeTimestampUSec/1000, s.rttUSec/1000, s.sentWindowSize, s.ackWindowSize)
 }
 
 func (s *flowStat) CSVString() string {
-	return fmt.Sprintf("%d\t%d", s.deliveryRateBPS, s.rttUSec)
+	return fmt.Sprintf("%d\t%d\t%d\t%d", s.deliveryRateBPS, s.rttUSec, s.sentWindowSize, s.ackWindowSize)
 }

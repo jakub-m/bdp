@@ -73,6 +73,10 @@ func (f *TcpPacket) HeaderSize() uint16 {
 	return (f.hdr.Offset_Flags & 0xF000 >> 12) * 4
 }
 
+func (f *TcpPacket) WindowSize() uint16 {
+	return f.hdr.WindowSize
+}
+
 func ParseTCPPacket(raw []byte) (*TcpPacket, error) {
 	reader := bytes.NewReader(raw)
 	header := &tcpHdr{}
