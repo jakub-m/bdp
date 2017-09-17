@@ -22,7 +22,7 @@ unset colorbox
 {{if .XRange -}} set xrange [{{.XRange}}] {{- end}}
 {{if .YRange -}} set yrange [{{.YRange}}] {{- end}}
 
-plot "{{.InputPath}}" using 1:2:0 with points pointtype 1 pointsize 1 palette {{if .Strip -}} notitle {{- end}}
+plot "{{.InputPath}}" using 1:2:0 with points pointtype 1 pointsize 1 palette {{if (and (not .Strip) .Title) -}} title '{{.Title}}' {{- end}} {{if .Strip -}} notitle {{- end}}
 `
 
 var args struct {
@@ -34,12 +34,14 @@ var args struct {
 	Width      int
 	Height     int
 	Strip      bool
+	Title      string
 }
 
 func init() {
 	log.SetFlags(0)
 	flag.StringVar(&args.InputPath, "i", "", "input path (csv)")
 	flag.StringVar(&args.OutputPath, "o", "", "output path (png)")
+	flag.StringVar(&args.Title, "t", "", "title")
 	flag.StringVar(&args.XRange, "xrange", "", "x range (e.g. \"8e5:3e6\")")
 	flag.StringVar(&args.YRange, "yrange", "", "y range (e.g. \"5e4:5e5\")")
 	flag.BoolVar(&args.LogScale, "log", false, "enable log scale")
