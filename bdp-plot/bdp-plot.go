@@ -16,13 +16,16 @@ set output "{{.OutputPath}}"
 unset xtics
 unset ytics
 unset colorbox
+{{else}}
+set xlabel 'bandwidth [kbps]'
+set ylabel 'rtt [ms]'
 {{end}}
 
 {{if .LogScale -}} set logscale {{- end}}
 {{if .XRange -}} set xrange [{{.XRange}}] {{- end}}
 {{if .YRange -}} set yrange [{{.YRange}}] {{- end}}
 
-plot "{{.InputPath}}" using 1:2:0 with points pointtype 1 pointsize 1 palette {{if (and (not .Strip) .Title) -}} title '{{.Title}}' {{- end}} {{if .Strip -}} notitle {{- end}}
+plot "{{.InputPath}}" using ($1/1000):($2/1000):0 with points pointtype 1 pointsize 1 palette {{if (and (not .Strip) .Title) -}} title '{{.Title}}' {{- end}} {{if .Strip -}} notitle {{- end}}
 `
 
 var args struct {
